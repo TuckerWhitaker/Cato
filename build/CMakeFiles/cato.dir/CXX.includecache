@@ -6,6 +6,10 @@
 
 #IncludeRegexTransform: 
 
+/mnt/f/C/Language/src/arena.hpp
+iostream
+-
+
 /mnt/f/C/Language/src/generation.hpp
 sstream
 -
@@ -16,6 +20,8 @@ vector
 ./parser.hpp
 /mnt/f/C/Language/src/parser.hpp
 unordered_map
+-
+assert.h
 -
 
 /mnt/f/C/Language/src/main.cpp
@@ -35,6 +41,8 @@ vector
 /mnt/f/C/Language/src/parser.hpp
 ./generation.hpp
 /mnt/f/C/Language/src/generation.hpp
+./arena.hpp
+/mnt/f/C/Language/src/arena.hpp
 
 /mnt/f/C/Language/src/parser.hpp
 iostream
@@ -47,6 +55,8 @@ vector
 /mnt/f/C/Language/src/tokenization.hpp
 variant
 -
+./arena.hpp
+/mnt/f/C/Language/src/arena.hpp
 
 /mnt/f/C/Language/src/tokenization.hpp
 iostream

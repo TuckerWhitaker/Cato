@@ -6,7 +6,7 @@
 #include "./tokenization.hpp"
 #include "./parser.hpp"
 #include "./generation.hpp"
-
+#include "./arena.hpp"
 
 int main(int argc, char* argv[]){
 
@@ -28,7 +28,7 @@ int main(int argc, char* argv[]){
     std::vector<Token> tokens = tokenizer.tokenize();
 
     Parser parser(std::move(tokens));
-    std::optional<node::NodeProg> prog = parser.parse_prog();
+    std::optional<NodeProg> prog = parser.parse_prog();
 
 
     if(!prog.has_value()){

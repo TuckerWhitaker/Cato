@@ -4,82 +4,94 @@
 #include "./tokenization.hpp"
 #include "./parser.hpp"
 #include <unordered_map>
-
+#include <assert.h>
 
 
 class Generator{
     public:
-        inline Generator(node::NodeProg prog)
+        inline explicit Generator(NodeProg prog)
         : m_program(std::move(prog))
         {
         }
 
-        void generate_expression(const node::NodeExpr& expr) {
-
-            struct ExpressionVisitor {
-
+    void gen_term(const NodeTerm* term) {
+            struct TermVisitor {
                 Generator* gen;
-               
-
-                void operator()(const node::NodeExprIntLit& expression_int_lit)
-                {
-                    gen->m_output << "  mov rax, " << expression_int_lit.int_lit.value.value() << "\n";
+                void operator()(const NodeTermIntLit* term_int_lit) const {
+                    gen->m_output << "    mov rax, " << term_int_lit->int_lit.value.value() << "\n";
                     gen->push("rax");
-                   
                 }
-                 void operator()(const node::NodeExprIdent& expression_ident)
-                {
-                    if(!gen->m_vars.contains(expression_ident.ident.value.value())) {
-                        std::cerr << "Undeclared Identifier " << expression_ident.ident.value.value() << std::endl;
-                        exit(EXIT_FAILURE);
-                    };
-                    const auto& var = gen->m_vars.at(expression_ident.ident.value.value());
-                    std::stringstream offset;
-                    offset << "QWORD [rsp +" << (gen->m_stack_size - var.stack_loc - 1) * 8 << "]\n";
-                    gen->push(offset.str());
-                 
-                }
-            };
-
-            ExpressionVisitor visitor({.gen = this});
-            std::visit(visitor, expr.var);
-
-        };
-
-        void generate_statment(const node::NodeStatment& statment) {
-
-            struct StatmentVisitor {
-                Generator* gen;
-                void operator()(const node::NodeStatmentExit& statment_exit)
-                {
-                    gen->generate_expression(statment_exit.expr);
-                    gen->m_output << "  mov rax, 60\n";
-                    gen->pop("rdi");
-                    gen->m_output << "  syscall\n";
-                   
-                }
-                
-                void operator()(const node::NodeStatmentLet& statment_let)
-                {
-                   
-                    if (gen->m_vars.contains(statment_let.ident.value.value())){
-                        std::cerr << "Identifier already defined\n" << statment_let.ident.value.value() << std::endl;
+                void operator()(const NodeTermIdent* term_ident) const {
+                    if (!gen->m_vars.contains(term_ident->ident.value.value())) {
+                        std::cerr << "Undeclared identifier: " << term_ident->ident.value.value() << std::endl;
                         exit(EXIT_FAILURE);
                     }
-
-                    gen->m_vars.insert({statment_let.ident.value.value(), Var {.stack_loc = gen->m_stack_size}});
-                    gen->generate_expression(statment_let.expr);
+                    const auto& var = gen->m_vars.at(term_ident->ident.value.value());
+                    std::stringstream offset;
+                    offset << "QWORD [rsp + " << (gen->m_stack_size - var.stack_loc - 1) * 8 << "]\n";
+                    gen->push(offset.str());
                 }
             };
-            StatmentVisitor visitor{.gen = this};
-            std::visit(visitor, statment.var);
+
+        TermVisitor visitor({.gen = this});
+        std::visit(visitor, term->var);
+    }
+
+
+    void generate_expression(const NodeExpr* expr)
+    {
+        struct ExprVisitor {
+            Generator* gen;
+            void operator()(const NodeTerm* term) const
+            {
+                gen->gen_term(term);
+            }
+            void operator()(const NodeBinExpression* bin_expr) const
+            {
+                gen->generate_expression(bin_expr->add->lhs);
+                gen->generate_expression(bin_expr->add->rhs);
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "    add rax, rbx\n";
+                gen->push("rax");
+            }
         };
+
+        ExprVisitor visitor { .gen = this };
+        std::visit(visitor, expr->var);
+    }
+
+    void generate_statment(const NodeStatment* stmt)
+    {
+        struct StmtVisitor {
+            Generator* gen;
+            void operator()(const NodeStatmentExit* stmt_exit) const
+            {
+                gen->generate_expression(stmt_exit->expr);
+                gen->m_output << "    mov rax, 60\n";
+                gen->pop("rdi");
+                gen->m_output << "    syscall\n";
+            }
+            void operator()(const NodeStatmentLet* stmt_let) const
+            {
+                if (gen->m_vars.contains(stmt_let->ident.value.value())) {
+                    std::cerr << "Identifier already used: " << stmt_let->ident.value.value() << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                gen->m_vars.insert({ stmt_let->ident.value.value(), Var { .stack_loc = gen->m_stack_size } });
+                gen->generate_expression(stmt_let->expr);
+            }
+        };
+
+        StmtVisitor visitor { .gen = this };
+        std::visit(visitor, stmt->var);
+    }
 
         [[nodiscard]] std::string generate_program()
         {
             m_output << "global _start\n_start:\n";
 
-            for(const node::NodeStatment& statment : m_program.statements){
+            for(const NodeStatment* statment : m_program.statements){
                generate_statment(statment);
              
             }
@@ -111,7 +123,7 @@ class Generator{
         };
 
 
-        const node::NodeProg m_program;
+        const NodeProg m_program;
         std::stringstream m_output;
         size_t m_stack_size = 0;
         std::unordered_map<std::string, Var> m_vars {};
