@@ -14,8 +14,35 @@ enum class TokenType {
     ident,
     let,
     eq,
-    plus
+    plus,
+    star,
+    sub, 
+    div,
 };
+
+bool is_bin_op(TokenType type){
+    switch (type) {
+    case TokenType::plus:
+    case TokenType::star:
+    return true;
+    default:
+        return false;
+    }
+}
+
+std::optional<int> bin_prec(TokenType type)
+{
+    switch (type) {
+        case TokenType::plus:
+        case TokenType::sub:
+            return 0;
+        case TokenType::div:
+        case TokenType::star:
+            return 1;
+        default:
+            return {};
+    }
+}
 
 struct Token {
     TokenType type;
@@ -30,8 +57,7 @@ class Tokenizer {
         const std::string m_src;
         size_t m_index = 0;
 
-       inline explicit Tokenizer(std::string&& src) : m_src(std::move(src)) {}
-
+        inline explicit Tokenizer(std::string&& src) : m_src(std::move(src)) {}
 
         inline std::vector<Token> tokenize(){
             
@@ -53,17 +79,17 @@ class Tokenizer {
                 if(buf == "exit"){
                     tokens.push_back({.type = TokenType::exit});
                     buf.clear();
-                    continue;
+                    
                 } 
                 else if(buf == "let"){
                     tokens.push_back({.type = TokenType::let});
                     buf.clear();
-                    continue;
+                    
                 }
                 else{
                     tokens.push_back({.type = TokenType::ident, .value = buf});
                     buf.clear();
-                    continue;
+                    
                 }
             }
             else if(std::isdigit(peek().value())){
@@ -74,7 +100,6 @@ class Tokenizer {
                 tokens.push_back({.type = TokenType::int_lit, .value = buf});
                 buf.clear();
             }
-
             else if(peek().value() == '('){
                 consume();
                 tokens.push_back({.type = TokenType::open_paren});
@@ -83,28 +108,33 @@ class Tokenizer {
                 consume();
                 tokens.push_back({.type = TokenType::close_paren});
             }
-
             else if(peek().value() == ';'){
                 consume();
                 tokens.push_back({.type = TokenType::semi});
-                continue;
             }
-
             else if (peek().value() == '=') {
                 consume();
-                tokens.push_back({ .type = TokenType::eq });
-                continue;
+                tokens.push_back({ .type = TokenType::eq });    
             }
-
             else if (peek().value() == '+') {
                 consume();
                 tokens.push_back({ .type = TokenType::plus });
-                continue;
+            }
+            else if (peek().value() == '*') {
+                consume();
+                tokens.push_back({ .type = TokenType::star });
+            }
+            else if (peek().value() == '-') {
+                consume();
+                tokens.push_back({ .type = TokenType::sub });
+            }
+            else if (peek().value() == '/') {
+                consume();
+                tokens.push_back({ .type = TokenType::div });
             }
 
             else if(std::isspace(peek().value())){
-                consume();
-                continue;
+                consume(); 
             }
             else{
                 std::cerr << "Goof Tokenization" << std::endl;

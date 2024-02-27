@@ -45,9 +45,6 @@ int main(int argc, char* argv[]){
     {
         std::fstream file ("out.asm", std::ios::out);
         file << generator.generate_program();
-        //^ error in here
-        
-
     }
 
 

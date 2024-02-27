@@ -18,7 +18,7 @@ class Generator{
             struct TermVisitor {
                 Generator* gen;
                 void operator()(const NodeTermIntLit* term_int_lit) const {
-                    gen->m_output << "    mov rax, " << term_int_lit->int_lit.value.value() << "\n";
+                    gen->m_output << "  mov rax, " << term_int_lit->int_lit.value.value() << "\n";
                     gen->push("rax");
                 }
                 void operator()(const NodeTermIdent* term_ident) const {
@@ -31,12 +31,71 @@ class Generator{
                     offset << "QWORD [rsp + " << (gen->m_stack_size - var.stack_loc - 1) * 8 << "]\n";
                     gen->push(offset.str());
                 }
+                void operator()(const NodeTermParen* term_paren) const
+                {
+                    gen->generate_expression(term_paren->expr);
+                }
             };
 
         TermVisitor visitor({.gen = this});
         std::visit(visitor, term->var);
     }
 
+    void generate_bin_expression(const NodeBinExpression* bin_expr){
+        struct BinExpressionVisitor {
+            Generator* gen;
+            void operator()(const NodeBinExpressionSub* sub) const 
+            {
+                gen->generate_expression(sub->rhs);
+                gen->generate_expression(sub->lhs);
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "  sub rax, rbx\n";
+                gen->push("rax");
+
+            }
+            void operator()(const NodeBinExpressionAdd* add) const 
+            {
+                gen->generate_expression(add->rhs);
+                gen->generate_expression(add->lhs);
+                
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "  add rax, rbx\n";
+                gen->push("rax");
+
+            }
+            void operator()(const NodeBinExpressionMulti* multi) const 
+            {
+                gen->generate_expression(multi->rhs);
+                gen->generate_expression(multi->lhs);
+                
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "  mul rbx\n";
+                gen->push("rax");
+
+            }
+            void operator()(const NodeBinExpressionDiv* div) const 
+            {
+                gen->generate_expression(div->rhs);
+                gen->generate_expression(div->lhs);
+               
+                gen->pop("rax");
+                gen->pop("rbx");
+                gen->m_output << "  div rbx\n";
+                gen->push("rax");
+
+            }
+            void operator()(const NodeTermParen* term_paren) const 
+            {
+                gen->generate_expression(term_paren->expr);
+            }
+        };
+
+        BinExpressionVisitor visitor { .gen = this };
+        std::visit(visitor, bin_expr->var);
+    }
 
     void generate_expression(const NodeExpr* expr)
     {
@@ -48,12 +107,7 @@ class Generator{
             }
             void operator()(const NodeBinExpression* bin_expr) const
             {
-                gen->generate_expression(bin_expr->add->lhs);
-                gen->generate_expression(bin_expr->add->rhs);
-                gen->pop("rax");
-                gen->pop("rbx");
-                gen->m_output << "    add rax, rbx\n";
-                gen->push("rax");
+                gen->generate_bin_expression(bin_expr);
             }
         };
 
@@ -68,9 +122,9 @@ class Generator{
             void operator()(const NodeStatmentExit* stmt_exit) const
             {
                 gen->generate_expression(stmt_exit->expr);
-                gen->m_output << "    mov rax, 60\n";
+                gen->m_output << "  mov rax, 60\n";
                 gen->pop("rdi");
-                gen->m_output << "    syscall\n";
+                gen->m_output << "  syscall\n";
             }
             void operator()(const NodeStatmentLet* stmt_let) const
             {
@@ -95,8 +149,6 @@ class Generator{
                generate_statment(statment);
              
             }
-
-
             m_output << "  mov rax, 60\n";
             m_output << "  mov rdi, 0\n";
             m_output << "  syscall\n";
