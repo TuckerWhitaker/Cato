@@ -1,6 +1,16 @@
 let x = 1;
-if(x){
-    exit(69);
+let y = 0;
+//comment
+/*
+Multi line comment
+*/
+if(0){
+    exit(1);
+} elif (0) {
+    exit(2);
+}
+else{
+    exit(3);
 }
 
-exit(1);
+exit(5);

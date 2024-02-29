@@ -21,6 +21,8 @@ enum class TokenType {
     open_curly,
     close_curly,
     if_,
+    elif_,
+    else_,
 };
 
 bool is_bin_op(TokenType type){
@@ -94,6 +96,16 @@ class Tokenizer {
                     buf.clear();
                     
                 }
+                else if(buf == "else"){
+                    tokens.push_back({.type = TokenType::else_});
+                    buf.clear();
+                    
+                }
+                else if(buf == "elif"){
+                    tokens.push_back({.type = TokenType::elif_});
+                    buf.clear();
+                    
+                }
                 else{
                     tokens.push_back({.type = TokenType::ident, .value = buf});
                     buf.clear();
@@ -107,6 +119,22 @@ class Tokenizer {
                 }
                 tokens.push_back({.type = TokenType::int_lit, .value = buf});
                 buf.clear();
+            }
+            else if(peek().value() == '/' && peek(1).has_value() && peek(1).value() == '/'){
+                consume();
+                consume();
+                while(peek().has_value() && peek().value() != '\n'){
+                    consume();
+                }
+            }
+            else if(peek().value() == '/' && peek(1).has_value() && peek(1).value() == '*'){
+                consume();
+                consume();
+                while(peek().has_value() && peek().value() != '*' && peek(1).value() != '/'){
+                    consume();
+                }
+                consume();
+                consume();
             }
             else if(peek().value() == '('){
                 consume();

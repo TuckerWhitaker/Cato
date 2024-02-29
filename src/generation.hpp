@@ -127,6 +127,42 @@ class Generator{
         end_scope();
     }
 
+    void generate_if_predicate(const NodeIfPred* pred, const std::string& end_label){
+        struct PredVisitor {
+            Generator& gen;
+            const std::string& end_label;
+
+            void operator()(const NodeIfPredicateElif* elif) const{
+                gen.generate_expression(elif->expr);
+                gen.pop("rax");
+                const std::string label = gen.create_label();
+                gen.m_output << "  test rax, rax\n";
+                gen.m_output << "  jz " << label << "\n";
+                gen.generate_scope(elif->scope);
+                gen.m_output << "  jmp "<< end_label <<  "\n";
+                
+                if(elif->pred.has_value()){
+                    gen.m_output << label << ":\n";
+                    gen.generate_if_predicate(elif->pred.value(), end_label);
+                }
+                
+                
+
+                
+            }
+            void operator()(const NodeIfPredicateElse* else_) const{
+                gen.generate_scope(else_->scope);
+
+            }
+        };
+
+        PredVisitor visitor{.gen = *this, .end_label = end_label};
+        std::visit(visitor, pred->var);
+
+
+    }
+
+
     void generate_statment(const NodeStatment* stmt)
     {
         struct StmtVisitor {
@@ -161,6 +197,12 @@ class Generator{
                 gen.m_output << "  jz " << label << "\n";
                 gen.generate_scope(statment_if->scope);
                 gen.m_output << label << ":\n";
+                if(statment_if->pred.has_value()){
+                    const std::string end_label = gen.create_label();
+                    gen.generate_if_predicate(statment_if->pred.value(), end_label);
+                    gen.m_output << end_label << ":\n";
+                }
+                
 
             }
             void operator()(const NodeScope* scope) const

@@ -31,14 +31,31 @@
     };
 
     struct NodeStatment;
-
+    struct NodeIfPred;
+    
     struct NodeScope{
         std::vector<NodeStatment*> statements;
     };
 
+    struct NodeIfPredicateElif{
+        NodeExpr* expr;
+        NodeScope* scope;
+        std::optional<NodeIfPred*> pred;
+    };
+
+    struct NodeIfPredicateElse{
+        NodeScope* scope;
+    };
+
+    struct NodeIfPred{
+        std::variant<NodeIfPredicateElif*, NodeIfPredicateElse*> var;
+    };
+
+
     struct NodeStatmentIf{
         NodeExpr* expr;
         NodeScope* scope;
+        std::optional<NodeIfPred*> pred;
     };
 
     struct NodeStatment{
@@ -222,6 +239,44 @@ class Parser {
             return scope;
     
         }
+
+        std::optional<NodeIfPred*> parse_if_predicate()
+        {
+            if(try_consume(TokenType::elif_)){
+                try_consume(TokenType::open_paren, "Expected `(`");
+                auto elif = m_allocator.alloc<NodeIfPredicateElif>();
+                if(auto expr = parse_expr()){
+                    elif->expr = expr.value();
+                }
+                else{
+                    std::cerr << "Expected Expression" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                try_consume(TokenType::close_paren, "Expected `)`");
+                if(auto scope = parse_scope()){
+                    elif->scope = scope.value();
+                }else{
+                    std::cerr << "Expected scope" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                elif->pred = parse_if_predicate();
+                auto pred = m_allocator.emplace<NodeIfPred>(elif);
+                return pred;
+            }
+            if(try_consume(TokenType::else_)){
+                auto else_ = m_allocator.alloc<NodeIfPredicateElse>();
+                if(auto scope = parse_scope()){
+                    else_->scope = scope.value();
+                }else{
+                    std::cerr << "Expected scope" << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                auto pred = m_allocator.emplace<NodeIfPred>(else_);
+                return pred;
+            }
+            return {};
+        };
+
         std::optional<NodeStatment*> parse_statment(){
              if (peek().value().type == TokenType::exit && peek(1).has_value() && peek(1).value().type == TokenType::open_paren){
                     consume();
@@ -294,6 +349,7 @@ class Parser {
                         exit(EXIT_FAILURE);
                     }
 
+                    statment_if->pred = parse_if_predicate();
                     auto statment = m_allocator.alloc<NodeStatment>();
                     statment->var = statment_if;
                     return statment;
