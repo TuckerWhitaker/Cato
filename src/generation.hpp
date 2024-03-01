@@ -5,6 +5,7 @@
 #include "./parser.hpp"
 #include <map>
 #include <assert.h>
+#include <algorithm>
 
 
 class Generator{
@@ -146,9 +147,6 @@ class Generator{
                     gen.generate_if_predicate(elif->pred.value(), end_label);
                 }
                 
-                
-
-                
             }
             void operator()(const NodeIfPredicateElse* else_) const{
                 gen.generate_scope(else_->scope);
@@ -196,18 +194,37 @@ class Generator{
                 gen.m_output << "  test rax, rax\n";
                 gen.m_output << "  jz " << label << "\n";
                 gen.generate_scope(statment_if->scope);
-                gen.m_output << label << ":\n";
-                if(statment_if->pred.has_value()){
+                if (statment_if->pred.has_value()) {
                     const std::string end_label = gen.create_label();
+                    gen.m_output << "    jmp " << end_label << "\n";
+                    gen.m_output << label << ":\n";
                     gen.generate_if_predicate(statment_if->pred.value(), end_label);
                     gen.m_output << end_label << ":\n";
                 }
+                else {
+                    gen.m_output << label << ":\n";
+                }
+                gen.m_output << "    ;; /if\n";
                 
 
             }
             void operator()(const NodeScope* scope) const
             {
                 gen.generate_scope(scope);
+            }
+            void operator()(const NodeStatmentAssign* stmt_assign) const
+            {
+                auto it = std::find_if(gen.m_vars.cbegin(), gen.m_vars.cend(), [&](const Var& var){
+                    return var.name == stmt_assign->ident.value.value();
+                });
+                
+                if(it == gen.m_vars.end()){
+                    std::cerr << "Undeclared identifier: " << stmt_assign->ident.value.value() << std::endl;
+                }
+                gen.generate_expression(stmt_assign->expr);
+                gen.pop("rax");
+                gen.m_output << "  mov [rsp + " << (gen.m_stack_size - (*it).stack_loc - 1) * 8 << "], rax\n";
+
             }
             
         };

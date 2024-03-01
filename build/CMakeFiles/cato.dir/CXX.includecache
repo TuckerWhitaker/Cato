@@ -29,6 +29,8 @@ map
 -
 assert.h
 -
+algorithm
+-
 
 /mnt/f/C/Language/src/main.cpp
 iostream

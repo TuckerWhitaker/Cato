@@ -1,16 +1,16 @@
 let x = 1;
-let y = 0;
+let y = 3;
 //comment
 /*
 Multi line comment
 */
 if(0){
-    exit(1);
+    x = 1;
 } elif (0) {
-    exit(2);
+    x = 2;
 }
 else{
-    exit(3);
+    x = 3;
 }
 
-exit(5);
+exit(x);

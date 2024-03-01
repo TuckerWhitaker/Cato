@@ -24,8 +24,14 @@
     struct NodeStatmentExit{
         NodeExpr* expr;
     };
+    
 
-      struct NodeStatmentLet{
+    struct NodeStatmentLet{
+        Token ident;
+        NodeExpr* expr;
+    };
+
+    struct NodeStatmentAssign{
         Token ident;
         NodeExpr* expr;
     };
@@ -59,7 +65,7 @@
     };
 
     struct NodeStatment{
-        std::variant<NodeStatmentExit*, NodeStatmentLet*, NodeScope*, NodeStatmentIf*> var;
+        std::variant<NodeStatmentExit*, NodeStatmentLet*, NodeScope*, NodeStatmentIf*, NodeStatmentAssign*> var;
     };
 
     struct NodeProg{
@@ -318,7 +324,27 @@ class Parser {
                     stmt->var = statment_let;
                     return stmt;
 
-                }else if(peek().has_value() && peek().value().type == TokenType::open_curly){
+                }
+                else if(peek().has_value() && peek().value().type == TokenType::ident 
+                && peek(1).has_value() 
+                && peek(1).value().type == TokenType::eq)
+                {
+                    const auto assign = m_allocator.alloc<NodeStatmentAssign>();
+                    assign->ident = consume();
+                    consume();
+                    if(const auto expr = parse_expr()){
+                        assign->expr = expr.value();
+                    } else {
+                        std::cerr << "Expected Expression" << std::endl;
+                        exit(EXIT_FAILURE);
+                    }
+                    try_consume(TokenType::semi, "Expected `;`");
+                    auto stmt = m_allocator.emplace<NodeStatment>(assign);
+                    return stmt;
+                }
+
+
+                else if(peek().has_value() && peek().value().type == TokenType::open_curly){
                     if(auto scope = parse_scope()){
                     auto statment = m_allocator.alloc<NodeStatment>();
                     statment->var = scope.value();
