@@ -92,6 +92,57 @@ class Generator{
                 gen.push("rax");
 
             }
+            void operator()(const NodeBinExpressionEquals* equals) const {
+                gen.generate_expression(equals->lhs);
+                gen.generate_expression(equals->rhs);
+
+                gen.pop("rbx");  
+                gen.pop("rax");  
+
+                gen.m_output << "  cmp rax, rbx\n"; 
+                gen.m_output << "  mov rax, 0\n";    
+                gen.m_output << "  sete al\n";       
+                gen.push("rax");
+            }
+            void operator()(const NodeBinExpressionNotEquals* not_equals) const {
+                gen.generate_expression(not_equals->lhs);
+                gen.generate_expression(not_equals->rhs);
+
+                gen.pop("rbx");  
+                gen.pop("rax");  
+
+                gen.m_output << "  cmp rax, rbx\n"; 
+                gen.m_output << "  mov rax, 0\n";    
+                gen.m_output << "  setne al\n";       
+                gen.push("rax");
+            }
+            void operator()(const NodeBinExpressionLess* less) const {
+                gen.generate_expression(less->lhs);
+                gen.generate_expression(less->rhs);
+
+                gen.pop("rbx");  
+                gen.pop("rax");  
+
+                gen.m_output << "  cmp rax, rbx\n"; 
+                gen.m_output << "  mov rax, 0\n";    
+                gen.m_output << "  setl al\n";       
+                gen.push("rax");
+            }
+            void operator()(const NodeBinExpressionGreater* greater_than) const {
+                gen.generate_expression(greater_than->lhs);
+                gen.generate_expression(greater_than->rhs);
+
+                gen.pop("rbx");  
+                gen.pop("rax");  
+
+                gen.m_output << "  cmp rax, rbx\n"; 
+                gen.m_output << "  mov rax, 0\n";    
+                gen.m_output << "  setg al\n";       
+                gen.push("rax");
+            }
+
+
+
             void operator()(const NodeTermParen* term_paren) const 
             {
                 gen.generate_expression(term_paren->expr);
@@ -122,8 +173,8 @@ class Generator{
 
     void generate_scope(const NodeScope* scope){
         begin_scope();
-        for(const NodeStatment* statment: scope->statements){
-            generate_statment(statment);
+        for(const NodeStatement* statement: scope->statements){
+            generate_statement(statement);
         }
         end_scope();
     }
@@ -161,18 +212,18 @@ class Generator{
     }
 
 
-    void generate_statment(const NodeStatment* stmt)
+    void generate_statement(const NodeStatement* stmt)
     {
         struct StmtVisitor {
             Generator& gen;
-            void operator()(const NodeStatmentExit* stmt_exit) const
+            void operator()(const NodeStatementExit* stmt_exit) const
             {
                 gen.generate_expression(stmt_exit->expr);
                 gen.m_output << "  mov rax, 60\n";
                 gen.pop("rdi");
                 gen.m_output << "  syscall\n";
             }
-            void operator()(const NodeStatmentLet* stmt_let) const
+            void operator()(const NodeStatementLet* stmt_let) const
             {
 
                 auto it = std::find_if(gen.m_vars.cbegin(), gen.m_vars.cend(), [&](const Var& var){
@@ -186,33 +237,31 @@ class Generator{
                 gen.m_vars.push_back({.name = stmt_let->ident.value.value(), .stack_loc = gen.m_stack_size });
                 gen.generate_expression(stmt_let->expr);
             }
-            void operator()(const NodeStatmentIf* statment_if) const
-            {
-                gen.generate_expression(statment_if->expr);
-                gen.pop("rax");
-                std::string label = gen.create_label();
-                gen.m_output << "  test rax, rax\n";
-                gen.m_output << "  jz " << label << "\n";
-                gen.generate_scope(statment_if->scope);
-                if (statment_if->pred.has_value()) {
-                    const std::string end_label = gen.create_label();
-                    gen.m_output << "    jmp " << end_label << "\n";
-                    gen.m_output << label << ":\n";
-                    gen.generate_if_predicate(statment_if->pred.value(), end_label);
-                    gen.m_output << end_label << ":\n";
-                }
-                else {
-                    gen.m_output << label << ":\n";
-                }
-                gen.m_output << "    ;; /if\n";
-                
+            void operator()(const NodeStatementIf* statement_if) const {
 
+                gen.generate_expression(statement_if->expr); 
+                gen.pop("rax");  
+                gen.m_output << "  test rax, rax\n";
+                std::string label = gen.create_label();
+                gen.m_output << "  jz " << label << "\n";
+                gen.generate_scope(statement_if->scope);
+
+                if (statement_if->pred.has_value()) {
+                    const std::string end_label = gen.create_label();
+                    gen.m_output << "  jmp " << end_label << "\n"; 
+                    gen.m_output << label << ":\n";  
+                    gen.generate_if_predicate(statement_if->pred.value(), end_label);
+                    gen.m_output << end_label << ":\n";
+                } else {
+                    gen.m_output << label << ":\n";
+                }
+                gen.m_output << "  ;; /if\n";
             }
             void operator()(const NodeScope* scope) const
             {
                 gen.generate_scope(scope);
             }
-            void operator()(const NodeStatmentAssign* stmt_assign) const
+            void operator()(const NodeStatementAssign* stmt_assign) const
             {
                 auto it = std::find_if(gen.m_vars.cbegin(), gen.m_vars.cend(), [&](const Var& var){
                     return var.name == stmt_assign->ident.value.value();
@@ -226,6 +275,35 @@ class Generator{
                 gen.m_output << "  mov [rsp + " << (gen.m_stack_size - (*it).stack_loc - 1) * 8 << "], rax\n";
 
             }
+            void operator()(const NodeStatementFor* stmt_for) const {
+              
+                if (stmt_for->init) {
+                    gen.generate_statement(stmt_for->init);
+                }
+
+                std::string start_label = gen.create_label();
+                std::string end_label = gen.create_label();
+
+                gen.m_output << start_label << ":\n";
+
+                if (stmt_for->condition) {
+                    gen.generate_expression(stmt_for->condition);
+                    gen.pop("rax");
+                    gen.m_output << "  test rax, rax\n";
+                    gen.m_output << "  jz " << end_label << "\n";
+                }
+
+                if (stmt_for->scope) {
+                    gen.generate_scope(stmt_for->scope);
+                }
+
+                if (stmt_for->iteration) {
+                    gen.generate_statement(stmt_for->iteration);
+                }
+                gen.m_output << "  jmp " << start_label << "\n";
+                gen.m_output << end_label << ":\n";
+            }
+
             
         };
 
@@ -237,8 +315,8 @@ class Generator{
         {
             m_output << "global _start\n_start:\n";
 
-            for(const NodeStatment* statment : m_program.statements){
-               generate_statment(statment);
+            for(const NodeStatement* statement : m_program.statements){
+               generate_statement(statement);
              
             }
             m_output << "  mov rax, 60\n";
@@ -278,6 +356,7 @@ class Generator{
         std::string create_label(){
             std::stringstream ss;
             ss << "label" << m_label_count++;
+            std::cout << ss.str() << "\n";
             return ss.str();
         }
 

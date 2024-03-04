@@ -1,16 +1,23 @@
 let x = 1;
 let y = 3;
 //comment
+
+
+for(let i = 0; i < 10; i = i + 1)
+{
+    x = x + 3;
+}
+
 /*
-Multi line comment
-*/
-if(0){
+let i = 7;
+if(i < 5){
     x = 1;
-} elif (0) {
+} else{
     x = 2;
-}
-else{
-    x = 3;
-}
+    if(i < 10){
+        x = 5;
+    }
+    
+}*/
 
 exit(x);

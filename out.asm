@@ -6,36 +6,41 @@ _start:
   push rax
   mov rax, 0
   push rax
-  pop rax
-  test rax, rax
-  jz label0
-  mov rax, 1
-  push rax
-  pop rax
-  mov [rsp + 8], rax
-  add rsp,0
-    jmp label1
 label0:
+  push QWORD [rsp + 0]
+  mov rax, 10
+  push rax
+  pop rbx
+  pop rax
+  cmp rax, rbx
   mov rax, 0
+  setl al
   push rax
   pop rax
   test rax, rax
-  jz label2
-  mov rax, 2
-  push rax
-  pop rax
-  mov [rsp + 8], rax
-  add rsp,0
-  jmp label1
-label2:
+  jz label1
   mov rax, 3
   push rax
+  push QWORD [rsp + 24]
   pop rax
-  mov [rsp + 8], rax
+  pop rbx
+  add rax, rbx
+  push rax
+  pop rax
+  mov [rsp + 16], rax
   add rsp,0
-label1:
-    ;; /if
+  mov rax, 1
+  push rax
   push QWORD [rsp + 8]
+  pop rax
+  pop rbx
+  add rax, rbx
+  push rax
+  pop rax
+  mov [rsp + 0], rax
+  jmp label0
+label1:
+  push QWORD [rsp + 16]
   mov rax, 60
   pop rdi
   syscall

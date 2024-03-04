@@ -23,6 +23,11 @@ enum class TokenType {
     if_,
     elif_,
     else_,
+    for_,
+    less_than,
+    greater_than,
+    equality,
+    not_equal,
 };
 
 bool is_bin_op(TokenType type){
@@ -40,10 +45,15 @@ std::optional<int> bin_prec(TokenType type)
     switch (type) {
         case TokenType::plus:
         case TokenType::sub:
-            return 0;
+            return 1;
         case TokenType::div:
         case TokenType::star:
-            return 1;
+            return 2;
+        case TokenType::greater_than:
+        case TokenType::less_than:
+        case TokenType::equality:
+        case TokenType::not_equal:
+            return 0; 
         default:
             return {};
     }
@@ -70,10 +80,10 @@ class Tokenizer {
         std::vector<Token> tokens;
 
         while(peek().has_value()){
-            auto optChar = peek(); // Use this to debug
+            auto optChar = peek();
             if(!optChar.has_value()) {
                 std::cerr << "Unexpected empty optional at index: " << m_index << std::endl;
-                break; // Or handle the error as appropriate
+                break;
             }
             
             if(std::isalpha(peek().value())){
@@ -104,7 +114,10 @@ class Tokenizer {
                 else if(buf == "elif"){
                     tokens.push_back({.type = TokenType::elif_});
                     buf.clear();
-                    
+                }
+                else if(buf == "for"){
+                    tokens.push_back({.type = TokenType::for_});
+                    buf.clear(); 
                 }
                 else{
                     tokens.push_back({.type = TokenType::ident, .value = buf});
@@ -135,6 +148,16 @@ class Tokenizer {
                 }
                 consume();
                 consume();
+            }
+            else if(peek().value() == '=' && peek(1).has_value() && peek(1).value() == '='){
+                consume();
+                consume();
+                tokens.push_back({ .type = TokenType::equality });
+            }
+            else if(peek().value() == '!' && peek(1).has_value() && peek(1).value() == '='){
+                consume();
+                consume();
+                tokens.push_back({ .type = TokenType::not_equal });
             }
             else if(peek().value() == '('){
                 consume();
@@ -175,6 +198,14 @@ class Tokenizer {
             else if (peek().value() == '}') {
                 consume();
                 tokens.push_back({ .type = TokenType::close_curly });
+            }
+            else if (peek().value() == '<') {
+                consume();
+                tokens.push_back({ .type = TokenType::less_than });
+            }
+            else if (peek().value() == '>') {
+                consume();
+                tokens.push_back({ .type = TokenType::greater_than });
             }
 
             else if(std::isspace(peek().value())){

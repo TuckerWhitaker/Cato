@@ -21,26 +21,26 @@
         NodeExpr* expr;
     };
 
-    struct NodeStatmentExit{
+    struct NodeStatementExit{
         NodeExpr* expr;
     };
-    
 
-    struct NodeStatmentLet{
+    struct NodeStatementLet{
         Token ident;
         NodeExpr* expr;
     };
 
-    struct NodeStatmentAssign{
+    struct NodeStatementAssign{
         Token ident;
         NodeExpr* expr;
     };
 
-    struct NodeStatment;
+    struct NodeStatement;
     struct NodeIfPred;
-    
+
+
     struct NodeScope{
-        std::vector<NodeStatment*> statements;
+        std::vector<NodeStatement*> statements;
     };
 
     struct NodeIfPredicateElif{
@@ -58,18 +58,28 @@
     };
 
 
-    struct NodeStatmentIf{
+    struct NodeStatementIf{
         NodeExpr* expr;
         NodeScope* scope;
         std::optional<NodeIfPred*> pred;
     };
 
-    struct NodeStatment{
-        std::variant<NodeStatmentExit*, NodeStatmentLet*, NodeScope*, NodeStatmentIf*, NodeStatmentAssign*> var;
+    struct NodeStatementFor{
+    NodeStatement* init;
+    NodeExpr* condition;
+    NodeStatement* iteration;
+    NodeScope* scope;
+
+    NodeStatementFor(NodeStatement* init, NodeExpr* condition, NodeStatement* iteration, NodeScope* scope)
+        : init(init), condition(condition), iteration(iteration), scope(scope) {}
+    };
+
+    struct NodeStatement{
+        std::variant<NodeStatementExit*, NodeStatementLet*, NodeScope*, NodeStatementIf*, NodeStatementAssign*, NodeStatementFor*> var;
     };
 
     struct NodeProg{
-        std::vector<NodeStatment*> statements;
+        std::vector<NodeStatement*> statements;
     };
 
 
@@ -94,8 +104,28 @@
         NodeExpr* rhs;
     };
 
+    struct NodeBinExpressionNotEquals{
+        NodeExpr* lhs;
+        NodeExpr* rhs;
+    };
+    struct NodeBinExpressionEquals{
+        NodeExpr* lhs;
+        NodeExpr* rhs;
+    };
+    struct NodeBinExpressionLess{
+        NodeExpr* lhs;
+        NodeExpr* rhs;
+    };
+    struct NodeBinExpressionGreater{
+        NodeExpr* lhs;
+        NodeExpr* rhs;
+    };
+
     struct NodeBinExpression{
-        std::variant<NodeBinExpressionAdd*, NodeBinExpressionSub*, NodeBinExpressionMulti*, NodeBinExpressionDiv*> var;
+        std::variant<NodeBinExpressionAdd*, NodeBinExpressionSub*,
+        NodeBinExpressionMulti*, NodeBinExpressionDiv*,
+        NodeBinExpressionEquals*, NodeBinExpressionNotEquals*,
+        NodeBinExpressionLess*, NodeBinExpressionGreater*> var;
     };
 
     struct NodeTerm {
@@ -146,7 +176,7 @@ class Parser {
                     std::cerr << "Expected Expression" << std::endl;
                     exit(EXIT_FAILURE);
                 }
-                try_consume(TokenType::close_paren, "Expected `)`");
+                try_consume(TokenType::close_paren, "Expected `)` 1");
                 auto term_paren = m_allocator.alloc<NodeTermParen>();
                 term_paren->expr = expr.value();
                 auto term = m_allocator.alloc<NodeTerm>();
@@ -203,6 +233,7 @@ class Parser {
                 add->lhs = expr_lhs2;
                 add->rhs = expr_rhs.value();
                 expr->var = add;
+                std::cout << "Created NodeBinExpressionAdd" << std::endl;
                 
             } else if (op.type == TokenType::sub) {
                 auto sub = m_allocator.alloc<NodeBinExpressionSub>();
@@ -210,18 +241,50 @@ class Parser {
                 sub->lhs = expr_lhs2;
                 sub->rhs = expr_rhs.value();
                 expr->var = sub;
+                std::cout << "Created NodeBinExpressionSub" << std::endl;
+
             } else if (op.type == TokenType::star) {
                 auto multi = m_allocator.alloc<NodeBinExpressionMulti>();
                 expr_lhs2->var = expr_lhs->var;
                 multi->lhs = expr_lhs2;
                 multi->rhs = expr_rhs.value();
                 expr->var = multi;
+                std::cout << "Created NodeBinExpressionMulti" << std::endl;
             } else if (op.type == TokenType::div) {
                 auto div = m_allocator.alloc<NodeBinExpressionDiv>();
                 expr_lhs2->var = expr_lhs->var;
                 div->lhs = expr_lhs2;
                 div->rhs = expr_rhs.value();
                 expr->var = div;
+                std::cout << "Created NodeBinExpressionDiv" << std::endl;
+            } else if (op.type == TokenType::equality) {
+                auto condition = m_allocator.alloc<NodeBinExpressionEquals>();
+                expr_lhs2->var = expr_lhs->var;
+                condition->lhs = expr_lhs2;
+                condition->rhs = expr_rhs.value();
+                expr->var = condition;
+                std::cout << "Created NodeBinExpressionEquals" << std::endl;
+            } else if (op.type == TokenType::not_equal) {
+                auto condition = m_allocator.alloc<NodeBinExpressionNotEquals>();
+                expr_lhs2->var = expr_lhs->var;
+                condition->lhs = expr_lhs2;
+                condition->rhs = expr_rhs.value();
+                expr->var = condition;
+                std::cout << "Created NodeBinExpressionNotEquals" << std::endl;
+            } else if (op.type == TokenType::greater_than) {
+                auto condition = m_allocator.alloc<NodeBinExpressionGreater>();
+                expr_lhs2->var = expr_lhs->var;
+                condition->lhs = expr_lhs2;
+                condition->rhs = expr_rhs.value();
+                expr->var = condition;
+                std::cout << "Created NodeBinExpressionGreater" << std::endl;
+            } else if (op.type == TokenType::less_than) {
+                auto condition = m_allocator.alloc<NodeBinExpressionLess>();
+                expr_lhs2->var = expr_lhs->var;
+                condition->lhs = expr_lhs2;
+                condition->rhs = expr_rhs.value();
+                expr->var = condition;
+                std::cout << "Created NodeBinExpressionLess" << std::endl;
             }
 
             expr_lhs->var = expr;
@@ -238,7 +301,7 @@ class Parser {
             }
 
             auto scope = m_allocator.alloc<NodeScope>();
-            while(auto statment = parse_statment()){
+            while(auto statment = parse_statement()){
                 scope->statements.push_back(statment.value());
             }
             try_consume(TokenType::close_curly, "Expected `}`");
@@ -258,7 +321,7 @@ class Parser {
                     std::cerr << "Expected Expression" << std::endl;
                     exit(EXIT_FAILURE);
                 }
-                try_consume(TokenType::close_paren, "Expected `)`");
+                try_consume(TokenType::close_paren, "Expected `)` 2");
                 if(auto scope = parse_scope()){
                     elif->scope = scope.value();
                 }else{
@@ -283,12 +346,59 @@ class Parser {
             return {};
         };
 
-        std::optional<NodeStatment*> parse_statment(){
+        std::optional<NodeStatement*> parse_for_statement() {
+            if (!try_consume(TokenType::for_)) {
+                return {};
+            }
+
+            try_consume(TokenType::open_paren, "Expected `(` in for loop");
+
+            auto init = parse_statement();
+            if (!init.has_value()) {
+                std::cerr << "Expected initialization in for loop" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+
+            auto condition = parse_expr();
+            if (!condition.has_value()) {
+                std::cerr << "Expected condition in for loop" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            try_consume(TokenType::semi, "Expected `;` after condition in for loop");
+
+
+            auto iteration = parse_statement(false);
+            if (!iteration.has_value()) {
+                std::cerr << "Expected iteration in for loop" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            try_consume(TokenType::close_paren, "Expected `)` after iteration in for loop");
+
+            auto scope = parse_scope();
+            if (!scope.has_value()) {
+                std::cerr << "Expected scope in for loop" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+
+            auto stmt_for = m_allocator.alloc<NodeStatementFor>();
+            stmt_for->init = init.value();
+            stmt_for->condition = condition.value();
+            stmt_for->iteration = iteration.value();
+            stmt_for->scope = scope.value();
+
+            auto stmt = m_allocator.alloc<NodeStatement>();
+            stmt->var = stmt_for;
+            return stmt;
+        }
+
+
+        std::optional<NodeStatement*> parse_statement(bool expect_semicolon = true){
              if (peek().value().type == TokenType::exit && peek(1).has_value() && peek(1).value().type == TokenType::open_paren){
                     consume();
                     consume();
 
-                    auto stmt_exit = m_allocator.alloc<NodeStatmentExit>();
+                    auto stmt_exit = m_allocator.alloc<NodeStatementExit>();
 
                     if(auto node_expr = parse_expr()){
                         stmt_exit->expr = node_expr.value();
@@ -297,9 +407,11 @@ class Parser {
                         std::cerr << "Goof Invalid Expression 1 " << std::endl;
                         exit(EXIT_FAILURE);
                     }
-                    try_consume(TokenType::close_paren, "Expected `)`");
-                    try_consume(TokenType::semi, "Expected `;`");
-                    auto stmt = m_allocator.alloc<NodeStatment>();
+                    try_consume(TokenType::close_paren, "Expected `)` 3");
+                    if (expect_semicolon) {
+                        try_consume(TokenType::semi, "Expected `;`");
+                    }
+                    auto stmt = m_allocator.alloc<NodeStatement>();
                     stmt->var = stmt_exit;
                     return stmt;
 
@@ -309,7 +421,7 @@ class Parser {
                     {
                     
                     consume();
-                    auto statment_let = m_allocator.alloc<NodeStatmentLet>();
+                    auto statment_let = m_allocator.alloc<NodeStatementLet>();
                     statment_let->ident = consume();
                     consume();
 
@@ -319,8 +431,10 @@ class Parser {
                         std::cerr << "Invalid Expression 1 " << std::endl;
                         exit(EXIT_FAILURE);
                     }
-                    try_consume(TokenType::semi, "Expected `;`");
-                    auto stmt = m_allocator.alloc<NodeStatment>();
+                    if (expect_semicolon) {
+                        try_consume(TokenType::semi, "Expected `;`");
+                    }
+                    auto stmt = m_allocator.alloc<NodeStatement>();
                     stmt->var = statment_let;
                     return stmt;
 
@@ -329,7 +443,7 @@ class Parser {
                 && peek(1).has_value() 
                 && peek(1).value().type == TokenType::eq)
                 {
-                    const auto assign = m_allocator.alloc<NodeStatmentAssign>();
+                    const auto assign = m_allocator.alloc<NodeStatementAssign>();
                     assign->ident = consume();
                     consume();
                     if(const auto expr = parse_expr()){
@@ -338,15 +452,17 @@ class Parser {
                         std::cerr << "Expected Expression" << std::endl;
                         exit(EXIT_FAILURE);
                     }
-                    try_consume(TokenType::semi, "Expected `;`");
-                    auto stmt = m_allocator.emplace<NodeStatment>(assign);
+                    if (expect_semicolon) {
+                        try_consume(TokenType::semi, "Expected `;`");
+                    }
+                    auto stmt = m_allocator.emplace<NodeStatement>(assign);
                     return stmt;
                 }
 
 
                 else if(peek().has_value() && peek().value().type == TokenType::open_curly){
                     if(auto scope = parse_scope()){
-                    auto statment = m_allocator.alloc<NodeStatment>();
+                    auto statment = m_allocator.alloc<NodeStatement>();
                     statment->var = scope.value();
                     return statment;
                     }else{
@@ -357,7 +473,7 @@ class Parser {
                 }
                 else if(auto if_ = try_consume(TokenType::if_)){
                     try_consume(TokenType::open_paren, "Expected `(`");
-                    auto statment_if = m_allocator.alloc<NodeStatmentIf>();
+                    auto statment_if = m_allocator.alloc<NodeStatementIf>();
                     if(auto expr = parse_expr()){
                         statment_if->expr = expr.value();
                     }
@@ -366,7 +482,7 @@ class Parser {
                         exit(EXIT_FAILURE);
                     }
 
-                    try_consume(TokenType::close_paren, "Expected `)`");
+                    try_consume(TokenType::close_paren, "Expected `)` 4");
                     if(auto scope = parse_scope()){
                         statment_if->scope = scope.value();
                     }
@@ -376,10 +492,12 @@ class Parser {
                     }
 
                     statment_if->pred = parse_if_predicate();
-                    auto statment = m_allocator.alloc<NodeStatment>();
+                    auto statment = m_allocator.alloc<NodeStatement>();
                     statment->var = statment_if;
                     return statment;
 
+                }else if (auto for_stmt = parse_for_statement()) {
+                    return for_stmt;
                 }
                 
                 else{
@@ -391,7 +509,7 @@ class Parser {
             NodeProg prog;
 
             while(peek().has_value()){
-                if(auto statment = parse_statment()){
+                if(auto statment = parse_statement()){
                     prog.statements.push_back(statment.value());
                 }
                 else {
