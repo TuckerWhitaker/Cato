@@ -12,7 +12,7 @@ enum class TokenType {
     open_paren,
     close_paren,
     ident,
-    let,
+    int_,
     eq,
     plus,
     star,
@@ -28,6 +28,10 @@ enum class TokenType {
     greater_than,
     equality,
     not_equal,
+    string_lit,
+    function,
+    comma,
+    return_,
 };
 
 bool is_bin_op(TokenType type){
@@ -94,25 +98,32 @@ class Tokenizer {
                 if(buf == "exit"){
                     tokens.push_back({.type = TokenType::exit});
                     buf.clear();
-                    
                 } 
-                else if(buf == "let"){
-                    tokens.push_back({.type = TokenType::let});
+                else if(buf == "int"){
+                    tokens.push_back({.type = TokenType::int_});
                     buf.clear();
-                    
+                }
+                else if(buf == "string"){
+                    tokens.push_back({.type = TokenType::string_lit});
+                    buf.clear();
+                }
+                else if(buf == "function"){
+                    tokens.push_back({.type = TokenType::function});
+                    buf.clear();
                 }
                 else if(buf == "if"){
                     tokens.push_back({.type = TokenType::if_});
                     buf.clear();
-                    
                 }
                 else if(buf == "else"){
                     tokens.push_back({.type = TokenType::else_});
-                    buf.clear();
-                    
                 }
                 else if(buf == "elif"){
                     tokens.push_back({.type = TokenType::elif_});
+                    buf.clear();
+                }
+                else if(buf == "return"){
+                    tokens.push_back({.type = TokenType::return_});
                     buf.clear();
                 }
                 else if(buf == "for"){
@@ -206,6 +217,10 @@ class Tokenizer {
             else if (peek().value() == '>') {
                 consume();
                 tokens.push_back({ .type = TokenType::greater_than });
+            }
+            else if (peek().value() == ',') {
+                consume();
+                tokens.push_back({ .type = TokenType::comma });
             }
 
             else if(std::isspace(peek().value())){

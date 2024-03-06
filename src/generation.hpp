@@ -40,11 +40,41 @@ class Generator{
                 {
                     gen.generate_expression(term_paren->expr);
                 }
+                void operator()(const NodeTermStringLit* term_string_lit) const {
+                    auto it = gen.m_string_literals.find(term_string_lit->value);
+                    if (it == gen.m_string_literals.end()) {
+                        // Generate a new label for the string
+                        std::string label = gen.create_label();
+                        gen.m_string_literals[term_string_lit->value] = label;
+                        // Store the string in the data section
+                        gen.m_data << label << ": db '" << term_string_lit->value << "', 0\n"; // Null-terminated string
+                    }
+
+                    // Load the address of the string into rax
+                    gen.m_output << "  lea rax, [" << gen.m_string_literals[term_string_lit->value] << "]\n";
+                    gen.push("rax");
+                }
+                void operator()(const NodeFunctionCall* func_call) const {
+                    for (auto it = func_call->args.rbegin(); it != func_call->args.rend(); ++it) {
+                        gen.generate_expression(*it);
+                    }
+                    // Call the function
+                    gen.m_output << "  call " << func_call->ident.value.value() << "\n";
+
+                    // Adjust stack pointer after the call if arguments were pushed
+                    if (!func_call->args.empty()) {
+                        gen.m_output << "  add rsp, " << func_call->args.size() * 8 << "\n";
+                    }
+
+                    // Result of the function call is assumed to be in RAX, push it onto the stack
+                    gen.push("rax");
+                }
+
             };
 
-        TermVisitor visitor({.gen = *this});
-        std::visit(visitor, term->var);
-    }
+            TermVisitor visitor({.gen = *this});
+            std::visit(visitor, term->var);
+        }
 
     void generate_bin_expression(const NodeBinExpression* bin_expr){
         struct BinExpressionVisitor {
@@ -140,9 +170,6 @@ class Generator{
                 gen.m_output << "  setg al\n";       
                 gen.push("rax");
             }
-
-
-
             void operator()(const NodeTermParen* term_paren) const 
             {
                 gen.generate_expression(term_paren->expr);
@@ -212,33 +239,78 @@ class Generator{
     }
 
 
-    void generate_statement(const NodeStatement* stmt)
+    void generate_statement(const NodeStatement* stmt, bool functionPass = false)
     {
         struct StmtVisitor {
             Generator& gen;
+            bool& functionPass;
+            
+            void operator()(const NodeFunctionDecl* func_decl) const {
+                if(functionPass){
+                    if (!func_decl->ident.value.has_value()) {
+                        std::cerr << "Function identifier is missing." << std::endl;
+                        exit(EXIT_FAILURE);
+                    }
+
+                    std::cout << "Generating function " << func_decl->ident.value.value() << std::endl;
+                    gen.m_output << func_decl->ident.value.value() << ":\n";
+                    gen.m_output << "  push rbp\n";
+                    gen.m_output << "  mov rbp, rsp\n";
+
+                    // Reserve space for local variables if needed
+                    gen.m_output << "  sub rsp, " << (func_decl->params.size() * 8) << "\n";
+
+                    // Store the function parameters as variables
+                    size_t param_offset = 16; // Start offset for the first parameter (previous rbp + return address)
+                    for (const auto& param : func_decl->params) {
+                        if (!param.value.has_value()) {
+                            std::cerr << "Function parameter identifier is missing." << std::endl;
+                            exit(EXIT_FAILURE);
+                        }
+                        gen.m_vars.push_back({.name = param.value.value(), .stack_loc = param_offset});
+                        //gen.m_vars.push_back({.name = param.value.value(), .stack_loc = func_decl->params.size() - offset - 1});
+                        param_offset += 8;
+                    }
+
+                    gen.generate_scope(func_decl->body);
+                        
+                    // Cleanup and return
+                    gen.m_output << "  mov rsp, rbp\n";
+                    gen.m_output << "  pop rbp\n";
+                    gen.m_output << "  ret\n";
+
+                    // Clear function parameters from the variables list after function is generated.
+                    gen.m_vars.clear();
+
+                }
+            }
+
             void operator()(const NodeStatementExit* stmt_exit) const
             {
+                if(!functionPass){
                 gen.generate_expression(stmt_exit->expr);
                 gen.m_output << "  mov rax, 60\n";
                 gen.pop("rdi");
                 gen.m_output << "  syscall\n";
+                }
             }
-            void operator()(const NodeStatementLet* stmt_let) const
+            void operator()(const NodeStatementInt* stmt_int) const
             {
-
+                if(!functionPass){
                 auto it = std::find_if(gen.m_vars.cbegin(), gen.m_vars.cend(), [&](const Var& var){
-                    return var.name == stmt_let->ident.value.value();
+                    return var.name == stmt_int->ident.value.value();
                 });
 
                 if (it != gen.m_vars.cend()) {
-                    std::cerr << "Identifier already used: " << stmt_let->ident.value.value() << std::endl;
+                    std::cerr << "Identifier already used: " << stmt_int->ident.value.value() << std::endl;
                     exit(EXIT_FAILURE);
                 }
-                gen.m_vars.push_back({.name = stmt_let->ident.value.value(), .stack_loc = gen.m_stack_size });
-                gen.generate_expression(stmt_let->expr);
+                gen.m_vars.push_back({.name = stmt_int->ident.value.value(), .stack_loc = gen.m_stack_size });
+                gen.generate_expression(stmt_int->expr);
+                }
             }
             void operator()(const NodeStatementIf* statement_if) const {
-
+                if(!functionPass){
                 gen.generate_expression(statement_if->expr); 
                 gen.pop("rax");  
                 gen.m_output << "  test rax, rax\n";
@@ -256,13 +328,17 @@ class Generator{
                     gen.m_output << label << ":\n";
                 }
                 gen.m_output << "  ;; /if\n";
+                }
             }
             void operator()(const NodeScope* scope) const
             {
+                if(!functionPass){
                 gen.generate_scope(scope);
+                }
             }
             void operator()(const NodeStatementAssign* stmt_assign) const
             {
+                if(!functionPass){
                 auto it = std::find_if(gen.m_vars.cbegin(), gen.m_vars.cend(), [&](const Var& var){
                     return var.name == stmt_assign->ident.value.value();
                 });
@@ -273,14 +349,13 @@ class Generator{
                 gen.generate_expression(stmt_assign->expr);
                 gen.pop("rax");
                 gen.m_output << "  mov [rsp + " << (gen.m_stack_size - (*it).stack_loc - 1) * 8 << "], rax\n";
-
+                }
             }
             void operator()(const NodeStatementFor* stmt_for) const {
-              
+                if(!functionPass){
                 if (stmt_for->init) {
                     gen.generate_statement(stmt_for->init);
                 }
-
                 std::string start_label = gen.create_label();
                 std::string end_label = gen.create_label();
 
@@ -302,30 +377,45 @@ class Generator{
                 }
                 gen.m_output << "  jmp " << start_label << "\n";
                 gen.m_output << end_label << ":\n";
+                }
             }
 
             
         };
 
-        StmtVisitor visitor { .gen = *this };
+        StmtVisitor visitor { .gen = *this, .functionPass = functionPass};
         std::visit(visitor, stmt->var);
     }
 
-        [[nodiscard]] std::string generate_program()
-        {
-            m_output << "global _start\n_start:\n";
-
-            for(const NodeStatement* statement : m_program.statements){
-               generate_statement(statement);
-             
-            }
-            m_output << "  mov rax, 60\n";
-            m_output << "  mov rdi, 0\n";
-            m_output << "  syscall\n";
-            return m_output.str();
-        }
+    std::string generate_program() {
+    std::cout << "generating program" << std::endl;
+    std::stringstream full_output;
 
 
+
+    for(const NodeStatement* statement : m_program.statements) {
+        generate_statement(statement, true);
+    }
+
+    m_output << "section .data\n";
+    m_output << m_data.str();
+    m_output << "section .text\nglobal _start\n";
+    m_output << "_start:\n";
+
+    // Generate the main program code
+    for(const NodeStatement* statement : m_program.statements) {
+        generate_statement(statement, false);
+    }
+
+    m_output << "  mov rax, 60\n";
+    m_output << "  mov rdi, 0\n";
+    m_output << "  syscall\n";
+
+    // Append function definitions at the end
+    //full_output << m_function_defs.str();
+
+    return m_output.str();
+    }
 
     private:
 
@@ -346,6 +436,7 @@ class Generator{
         void end_scope(){
             size_t pop_count = m_vars.size() - m_scopes.back();
             m_output << "  add rsp," << pop_count * 8 << "\n";
+            m_output << ";;endscope" << "\n";
             m_stack_size -= pop_count;
             for(int i = 0; i < pop_count; i++){
                 m_vars.pop_back();
@@ -367,7 +458,9 @@ class Generator{
             size_t stack_loc;
         };
 
-
+        std::stringstream m_function_defs;
+        std::stringstream m_data; // For storing data section
+        std::map<std::string, std::string> m_string_literals; // Map from string literal to its label
         const NodeProg m_program;
         std::stringstream m_output;
         size_t m_stack_size = 0;

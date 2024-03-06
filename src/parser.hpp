@@ -21,11 +21,15 @@
         NodeExpr* expr;
     };
 
+    struct NodeTermStringLit {
+        std::string value;
+    };
+
     struct NodeStatementExit{
         NodeExpr* expr;
     };
 
-    struct NodeStatementLet{
+    struct NodeStatementInt{
         Token ident;
         NodeExpr* expr;
     };
@@ -37,6 +41,7 @@
 
     struct NodeStatement;
     struct NodeIfPred;
+    struct NodeFunctionDecl;
 
 
     struct NodeScope{
@@ -75,11 +80,7 @@
     };
 
     struct NodeStatement{
-        std::variant<NodeStatementExit*, NodeStatementLet*, NodeScope*, NodeStatementIf*, NodeStatementAssign*, NodeStatementFor*> var;
-    };
-
-    struct NodeProg{
-        std::vector<NodeStatement*> statements;
+        std::variant<NodeStatementExit*, NodeStatementInt*, NodeScope*, NodeStatementIf*, NodeStatementAssign*, NodeStatementFor*, NodeFunctionDecl*> var;
     };
 
 
@@ -128,15 +129,32 @@
         NodeBinExpressionLess*, NodeBinExpressionGreater*> var;
     };
 
+    
+
+    struct NodeFunctionDecl {
+        Token ident;
+        std::vector<Token> params;
+        NodeScope* body;
+    };
+
+    struct NodeFunctionCall {
+        Token ident;
+        std::vector<NodeExpr*> args;
+    };
+
     struct NodeTerm {
-        std::variant<NodeTermIntLit*, NodeTermIdent*, NodeTermParen*> var;
+        std::variant<NodeTermIntLit*, NodeTermIdent*, NodeTermParen*, NodeTermStringLit*, NodeFunctionCall*> var;
     };
 
     struct NodeExpr {
         std::variant<NodeTerm*, NodeBinExpression*> var;
     };
 
-    
+    struct NodeProg{
+        std::vector<NodeStatement*> statements;
+        std::vector<NodeFunctionDecl*> functions;
+    };
+
 class Parser {
   
 
@@ -164,6 +182,33 @@ class Parser {
                 return term;
             }
             else if (auto ident = try_consume(TokenType::ident)) {
+                if (try_consume(TokenType::open_paren)) { // Function call
+                    auto func_call = m_allocator.alloc<NodeFunctionCall>();
+                    func_call->ident = ident.value();
+                    // Parse arguments
+                    while (!try_consume(TokenType::close_paren)) {
+                        if (auto arg = parse_expr()) {
+                            func_call->args.push_back(arg.value());
+                        } else {
+                            std::cerr << "Expected argument expression" << std::endl;
+                            exit(EXIT_FAILURE);
+                        }
+                        try_consume(TokenType::comma); // Optional comma
+                    }
+
+                    auto term = m_allocator.alloc<NodeTerm>();
+                    term->var = func_call;
+                    return term;
+                } else {
+                    // Handle identifier (variable)
+                    auto expr_ident = m_allocator.alloc<NodeTermIdent>();
+                    expr_ident->ident = ident.value();
+                    auto term = m_allocator.alloc<NodeTerm>();
+                    term->var = expr_ident;
+                    return term;
+                }
+            }
+            else if (auto ident = try_consume(TokenType::ident)) {
                 auto expr_ident = m_allocator.alloc<NodeTermIdent>();
                 expr_ident->ident = ident.value();
                 auto term = m_allocator.alloc<NodeTerm>();
@@ -181,6 +226,17 @@ class Parser {
                 term_paren->expr = expr.value();
                 auto term = m_allocator.alloc<NodeTerm>();
                 term->var = term_paren;
+                return term;
+            } else if (auto string_lit = try_consume(TokenType::string_lit)) {
+                auto term_string_lit = m_allocator.alloc<NodeTermStringLit>();
+                if (string_lit.has_value() && string_lit.value().value.has_value()) {
+                term_string_lit->value = string_lit.value().value.value();
+                } else {
+                    std::cerr << "String literal without a value." << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                auto term = m_allocator.alloc<NodeTerm>();
+                term->var = term_string_lit;
                 return term;
             }
             else {
@@ -415,18 +471,18 @@ class Parser {
                     stmt->var = stmt_exit;
                     return stmt;
 
-                } else if (peek().has_value() && peek().value().type == TokenType::let && peek(1).has_value() 
+                } else if (peek().has_value() && peek().value().type == TokenType::int_ && peek(1).has_value() 
                     && peek(1).value().type == TokenType::ident && peek(2).has_value() 
                     && peek(2).value().type == TokenType::eq)
                     {
                     
                     consume();
-                    auto statment_let = m_allocator.alloc<NodeStatementLet>();
-                    statment_let->ident = consume();
+                    auto statment_int = m_allocator.alloc<NodeStatementInt>();
+                    statment_int->ident = consume();
                     consume();
 
                     if(auto expr = parse_expr()){
-                        statment_let->expr = expr.value();
+                        statment_int->expr = expr.value();
                     } else{
                         std::cerr << "Invalid Expression 1 " << std::endl;
                         exit(EXIT_FAILURE);
@@ -435,7 +491,7 @@ class Parser {
                         try_consume(TokenType::semi, "Expected `;`");
                     }
                     auto stmt = m_allocator.alloc<NodeStatement>();
-                    stmt->var = statment_let;
+                    stmt->var = statment_int;
                     return stmt;
 
                 }
@@ -458,8 +514,11 @@ class Parser {
                     auto stmt = m_allocator.emplace<NodeStatement>(assign);
                     return stmt;
                 }
-
-
+                else if (auto func_decl = parse_function_decl()) {
+                    auto stmt = m_allocator.alloc<NodeStatement>();
+                    stmt->var = func_decl.value();
+                    return stmt;
+                }
                 else if(peek().has_value() && peek().value().type == TokenType::open_curly){
                     if(auto scope = parse_scope()){
                     auto statment = m_allocator.alloc<NodeStatement>();
@@ -503,6 +562,29 @@ class Parser {
                 else{
                     return {};
                 }
+        }
+
+        std::optional<NodeFunctionDecl*> parse_function_decl() {
+            if (!try_consume(TokenType::function)) {
+                return {};
+            }
+
+            auto func_decl = m_allocator.alloc<NodeFunctionDecl>();
+            func_decl->ident = try_consume(TokenType::ident, "Expected function name");
+
+            try_consume(TokenType::open_paren, "Expected `(` after function name");
+
+            while (!try_consume(TokenType::close_paren)) {
+                func_decl->params.push_back(try_consume(TokenType::ident, "Expected parameter name"));
+                try_consume(TokenType::comma);
+            }
+            if (auto scope = parse_scope()) {
+            func_decl->body = scope.value();
+            } else {
+                std::cerr << "Expected function body" << std::endl;
+                exit(EXIT_FAILURE);
+            }
+            return func_decl;
         }
 
         std::optional<NodeProg> parse_prog(){
