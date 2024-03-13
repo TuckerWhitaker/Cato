@@ -28,7 +28,7 @@ class Generator{
 
                     std::cout << "m_vars: " << gen.m_vars.size() << std::endl;
                     
-                    auto it = std::find_if(gen.m_vars.cbegin(), gen.m_vars.cend(), [&](const Var& var){
+                    auto it = std::find_if(gen.m_vars.cbegin(), gen.m_vars.cend(), [&](const Var& var) {
                         return var.name == term_ident->ident.value.value();
                     });
 
@@ -40,8 +40,9 @@ class Generator{
                     std::stringstream offset;
                     std::cout << "stack size:" << gen.m_stack_size << std::endl;
                     std::cout << "stack loc:" <<(*it).stack_loc << std::endl;
-                    std::cout << "QWORD [rsp + : " << (gen.m_stack_size - ((*it).stack_loc - 1)) * 8 << std::endl;
-                    offset << "QWORD [rsp + " << (gen.m_stack_size - ((*it).stack_loc - 1)) * 8 << "]";
+                    std::cout << "QWORD [rsp + : " << (gen.m_stack_size - (*it).stack_loc) * 8 << std::endl;
+                    offset << "QWORD [rsp + " << (gen.m_stack_size - (*it).stack_loc) * 8 << "]";
+                    
                     gen.push(offset.str());
                 }
                 void operator()(const NodeTermParen* term_paren) const
@@ -55,7 +56,7 @@ class Generator{
                         std::string label = gen.create_label();
                         gen.m_string_literals[term_string_lit->value] = label;
                         // Store the string in the data section
-                        gen.m_data << label << ": db '" << term_string_lit->value << "', 0\n"; // Null-terminated string
+                        gen.m_data << label << ": db '" << term_string_lit->value << "', 0\n"; 
                     }
 
                     // Load the address of the string into rax
@@ -296,18 +297,16 @@ class Generator{
                     // Function prologue...
                     gen.m_output << "  push rbp" << "\n";
                     gen.m_output << "  mov rbp, rsp" << "\n";
-                    gen.m_output << "  sub rsp, " << func_decl->params.size() * 8 << " ; make space for parameters\n";
-                    gen.m_output << "  mov rdi, 5" << "\n";
-
-                    for (size_t i = 0; i < func_decl->params.size(); ++i) {
-                        gen.m_output << "  mov [rbp - " << (i + 1) * 8 << "], " << "rdi\n";  // Assuming parameters are passed in rdi, rsi, etc.
-                    }
 
                     gen.generate_scope(func_decl->body);
-
                     // Function epilogue...
+                    gen.m_output << "  mov rsp, rbp" << "\n";
+                    gen.m_output << "  pop rbp" << "\n";
+                    gen.m_output << "  ret" << "\n";
+
+
+                    // Mark the epilogue label position
                     gen.m_output << gen.m_currentFunctionEpilogueLabel << ":\n";
-                    gen.m_output << "  add rsp, " << func_decl->params.size() * 8 << "\n";  // Clean up the parameters
                     gen.m_output << "  mov rsp, rbp\n";
                     gen.m_output << "  pop rbp\n";
                     gen.m_output << "  ret\n";
@@ -326,19 +325,21 @@ class Generator{
                 gen.m_output << ";;/Exit\n";
                 }
             }
-            void operator()(const NodeStatementInt* stmt_int) const
-            {
-                if(!functionPass){
-                auto it = std::find_if(gen.m_vars.cbegin(), gen.m_vars.cend(), [&](const Var& var){
-                    return var.name == stmt_int->ident.value.value();
-                });
+            void operator()(const NodeStatementInt* stmt_int) const {
+                if (!functionPass) {
+                    auto it = std::find_if(gen.m_vars.cbegin(), gen.m_vars.cend(), [&](const Var& var) {
+                        return var.name == stmt_int->ident.value.value();
+                    });
 
-                if (it != gen.m_vars.cend()) {
-                    std::cerr << "Identifier already used: " << stmt_int->ident.value.value() << std::endl;
-                    exit(EXIT_FAILURE);
-                }
-                gen.m_vars.push_back({.name = stmt_int->ident.value.value(), .stack_loc = gen.m_stack_size });
-                gen.generate_expression(stmt_int->expr);
+                    if (it != gen.m_vars.cend()) {
+                        std::cerr << "Identifier already used: " << stmt_int->ident.value.value() << std::endl;
+                        exit(EXIT_FAILURE);
+                    }
+
+                    // Add the variable to the stack and increment the stack size.
+                    gen.generate_expression(stmt_int->expr);
+                    gen.m_vars.push_back({.name = stmt_int->ident.value.value(), .stack_loc = gen.m_stack_size });
+                    //gen.m_stack_size++;
                 }
             }
             void operator()(const NodeStatementIf* statement_if) const {
@@ -382,8 +383,12 @@ class Generator{
                 }
                 gen.generate_expression(stmt_assign->expr);
                 gen.pop("rax");
-                
-                gen.m_output << "  mov [rsp + " << (gen.m_stack_size - (*it).stack_loc - 1) * 8 << "], rax\n";
+
+                std::cout << "NodeStatementAssign:" << std::endl;
+                std::cout << "stack size:" << gen.m_stack_size << std::endl;
+                std::cout << "stack loc:" <<(*it).stack_loc << std::endl;
+                std::cout << "QWORD [rsp + : " << (gen.m_stack_size - (*it).stack_loc) * 8 << std::endl;
+                gen.m_output << "  mov [rsp + " << (gen.m_stack_size - (*it).stack_loc) * 8 << "], rax\n";
                 }
             }
             void operator()(const NodeStatementFor* stmt_for) const {
@@ -431,7 +436,6 @@ class Generator{
     m_output << "section .data\n";
     m_output << m_data.str();
     m_output << "section .text\n";
-    m_output << "global test\n";
     m_output << "global _start\n";
     m_output << "_start:\n";
 
@@ -442,8 +446,7 @@ class Generator{
     }
 
 
-    m_output << "  call test\n";
-    m_output << "  mov rdi, 21\n";
+    m_output << "  mov rdi, rax\n";
     m_output << "  mov rax, 60\n";
     m_output << "  syscall\n";
     

@@ -1,43 +1,50 @@
 section .data
 section .text
-global test
 global _start
 _start:
 ;;NodeTermIntLit
-  mov rax, 7
+  mov rax, 9
   push rax
 ;;/NodeTermIntLit
-;;NodeFunctionCall
+;;NodeTermIntLit
+  mov rax, 5
+  push rax
+;;/NodeTermIntLit
+;;NodeTermIntLit
+  mov rax, 10
+  push rax
+;;/NodeTermIntLit
 ;;Exit
+;;add
+;;multi
+;;NodeTermIntLit
+  mov rax, 2
+  push rax
+;;/NodeTermIntLit
+  push QWORD [rsp + 16]
+  pop rax
+  pop rbx
+  mul rbx
+  push rax
+;;/multi
+;;add
   push QWORD [rsp + 8]
+  push QWORD [rsp + 32]
+  pop rax
+  pop rbx
+  add rax, rbx
+  push rax
+;;/add
+  pop rax
+  pop rbx
+  add rax, rbx
+  push rax
+;;/add
   mov rax, 60
   pop rdi
   syscall
 ;;/Exit
-  call test
-  mov rdi, 21
+  mov rdi, rax
   mov rax, 60
   syscall
 ;;functions
-;; Function: test
-global test
-test:
-  push rbp
-  mov rbp, rsp
-  sub rsp, 8 ; make space for parameters
-  mov rdi, 5
-  mov [rbp - 8], rdi
-;;begin_scope
-;;Return
-  push QWORD [rsp + 16]
-  pop rax
-  jmp label0_epilogue
-;;/Return
-  add rsp,0
-;;endscope
-label0_epilogue:
-  add rsp, 8
-  mov rsp, rbp
-  pop rbp
-  ret
-;; /Function: test

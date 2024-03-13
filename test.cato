@@ -1,7 +1,5 @@
-int a = 7;
-function test(a){
-    return a;
-}
+int a = 9;
+int b = 5;
+int c = 10;
 
-int r = test(2);
-exit(r);
+exit((a + c) + (b * 2));
