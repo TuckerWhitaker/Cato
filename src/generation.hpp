@@ -19,21 +19,29 @@ class Generator{
             struct TermVisitor {
                 Generator& gen;
                 void operator()(const NodeTermIntLit* term_int_lit) const {
+                    gen.m_output << ";;NodeTermIntLit" << "\n";
                     gen.m_output << "  mov rax, " << term_int_lit->int_lit.value.value() << "\n";
                     gen.push("rax");
+                    gen.m_output << ";;/NodeTermIntLit" << "\n";
                 }
                 void operator()(const NodeTermIdent* term_ident) const {
+
+                    std::cout << "m_vars: " << gen.m_vars.size() << std::endl;
+                    
                     auto it = std::find_if(gen.m_vars.cbegin(), gen.m_vars.cend(), [&](const Var& var){
                         return var.name == term_ident->ident.value.value();
                     });
 
                     if(it == gen.m_vars.cend()){
-                        std::cerr << "Undeclared identifier: " << term_ident->ident.value.value() << std::endl;
+                        std::cerr << "Undeclared identifier 1: " << term_ident->ident.value.value() << std::endl;
                         exit(EXIT_FAILURE);
                     }
                     
                     std::stringstream offset;
-                    offset << "QWORD [rsp + " << (gen.m_stack_size - (*it).stack_loc - 1) * 8 << "]";
+                    std::cout << "stack size:" << gen.m_stack_size << std::endl;
+                    std::cout << "stack loc:" <<(*it).stack_loc << std::endl;
+                    std::cout << "QWORD [rsp + : " << (gen.m_stack_size - ((*it).stack_loc - 1)) * 8 << std::endl;
+                    offset << "QWORD [rsp + " << (gen.m_stack_size - ((*it).stack_loc - 1)) * 8 << "]";
                     gen.push(offset.str());
                 }
                 void operator()(const NodeTermParen* term_paren) const
@@ -55,19 +63,7 @@ class Generator{
                     gen.push("rax");
                 }
                 void operator()(const NodeFunctionCall* func_call) const {
-                    for (auto it = func_call->args.rbegin(); it != func_call->args.rend(); ++it) {
-                        gen.generate_expression(*it);
-                    }
-                    // Call the function
-                    gen.m_output << "  call " << func_call->ident.value.value() << "\n";
-
-                    // Adjust stack pointer after the call if arguments were pushed
-                    if (!func_call->args.empty()) {
-                        gen.m_output << "  add rsp, " << func_call->args.size() * 8 << "\n";
-                    }
-
-                    // Result of the function call is assumed to be in RAX, push it onto the stack
-                    gen.push("rax");
+                    gen.m_output << ";;NodeFunctionCall" << "\n";
                 }
 
             };
@@ -81,16 +77,19 @@ class Generator{
             Generator& gen;
             void operator()(const NodeBinExpressionSub* sub) const 
             {
+                gen.m_output << ";;sub\n";
                 gen.generate_expression(sub->rhs);
                 gen.generate_expression(sub->lhs);
                 gen.pop("rax");
                 gen.pop("rbx");
                 gen.m_output << "  sub rax, rbx\n";
                 gen.push("rax");
+                gen.m_output << ";;/sub\n";
 
             }
             void operator()(const NodeBinExpressionAdd* add) const 
             {
+                gen.m_output << ";;add\n";
                 gen.generate_expression(add->rhs);
                 gen.generate_expression(add->lhs);
                 
@@ -98,10 +97,11 @@ class Generator{
                 gen.pop("rbx");
                 gen.m_output << "  add rax, rbx\n";
                 gen.push("rax");
-
+                gen.m_output << ";;/add\n";
             }
             void operator()(const NodeBinExpressionMulti* multi) const 
             {
+                gen.m_output << ";;multi\n";
                 gen.generate_expression(multi->rhs);
                 gen.generate_expression(multi->lhs);
                 
@@ -109,10 +109,12 @@ class Generator{
                 gen.pop("rbx");
                 gen.m_output << "  mul rbx\n";
                 gen.push("rax");
+                gen.m_output << ";;/multi\n";
 
             }
             void operator()(const NodeBinExpressionDiv* div) const 
             {
+                gen.m_output << ";;div\n";
                 gen.generate_expression(div->rhs);
                 gen.generate_expression(div->lhs);
                
@@ -120,9 +122,11 @@ class Generator{
                 gen.pop("rbx");
                 gen.m_output << "  div rbx\n";
                 gen.push("rax");
+                gen.m_output << ";;/div\n";
 
             }
             void operator()(const NodeBinExpressionEquals* equals) const {
+                gen.m_output << ";;equals\n";
                 gen.generate_expression(equals->lhs);
                 gen.generate_expression(equals->rhs);
 
@@ -133,8 +137,10 @@ class Generator{
                 gen.m_output << "  mov rax, 0\n";    
                 gen.m_output << "  sete al\n";       
                 gen.push("rax");
+                gen.m_output << ";;/equals\n";
             }
             void operator()(const NodeBinExpressionNotEquals* not_equals) const {
+                gen.m_output << ";;not_equals\n";
                 gen.generate_expression(not_equals->lhs);
                 gen.generate_expression(not_equals->rhs);
 
@@ -145,8 +151,10 @@ class Generator{
                 gen.m_output << "  mov rax, 0\n";    
                 gen.m_output << "  setne al\n";       
                 gen.push("rax");
+                gen.m_output << ";;/not_equals\n";
             }
             void operator()(const NodeBinExpressionLess* less) const {
+                gen.m_output << ";;less_than\n";
                 gen.generate_expression(less->lhs);
                 gen.generate_expression(less->rhs);
 
@@ -157,8 +165,10 @@ class Generator{
                 gen.m_output << "  mov rax, 0\n";    
                 gen.m_output << "  setl al\n";       
                 gen.push("rax");
+                gen.m_output << ";;/less_than\n";
             }
             void operator()(const NodeBinExpressionGreater* greater_than) const {
+                gen.m_output << ";;greater_than\n";
                 gen.generate_expression(greater_than->lhs);
                 gen.generate_expression(greater_than->rhs);
 
@@ -169,6 +179,7 @@ class Generator{
                 gen.m_output << "  mov rax, 0\n";    
                 gen.m_output << "  setg al\n";       
                 gen.push("rax");
+                gen.m_output << ";;/greater_than\n";
             }
             void operator()(const NodeTermParen* term_paren) const 
             {
@@ -244,54 +255,75 @@ class Generator{
         struct StmtVisitor {
             Generator& gen;
             bool& functionPass;
+
+
+            void operator()(const NodeStatementReturn* statement_return) const {
+                if (!functionPass) {
+                    gen.m_output << ";;Return\n";
+
+                    // If the return statement has an expression, evaluate it
+                    if (statement_return->expr) {
+                        gen.generate_expression(statement_return->expr);
+                        // Assume the result is in rax after expression evaluation
+                        gen.pop("rax");
+                    }
+
+                    // Jump to the function's epilogue
+                    // This assumes you have a label at the end of the function for the epilogue
+                    // The label should be unique per function; you can generate it when you start processing the function
+                    gen.m_output << "  jmp " << gen.currentFunctionEpilogueLabel() << "\n";
+                    gen.m_output << ";;/Return\n";
+                }
+            }
+
             
-            void operator()(const NodeFunctionDecl* func_decl) const {
-                if(functionPass){
+            void operator()(const NodeFunctionDecl* func_decl) const 
+            {
+                if (functionPass) {
                     if (!func_decl->ident.value.has_value()) {
                         std::cerr << "Function identifier is missing." << std::endl;
                         exit(EXIT_FAILURE);
                     }
 
-                    std::cout << "Generating function " << func_decl->ident.value.value() << std::endl;
-                    gen.m_output << func_decl->ident.value.value() << ":\n";
-                    gen.m_output << "  push rbp\n";
-                    gen.m_output << "  mov rbp, rsp\n";
+                    // Generate and store the unique epilogue label for the current function
+                    gen.m_currentFunctionEpilogueLabel = gen.create_label() + "_epilogue";
 
-                    // Reserve space for local variables if needed
-                    gen.m_output << "  sub rsp, " << (func_decl->params.size() * 8) << "\n";
+                    std::string funcName = func_decl->ident.value.value();
+                    gen.m_output << ";; Function: " << funcName << "\n";
+                    gen.m_output << "global " << funcName << "\n";
+                    gen.m_output << funcName << ":\n";
 
-                    // Store the function parameters as variables
-                    size_t param_offset = 16; // Start offset for the first parameter (previous rbp + return address)
-                    for (const auto& param : func_decl->params) {
-                        if (!param.value.has_value()) {
-                            std::cerr << "Function parameter identifier is missing." << std::endl;
-                            exit(EXIT_FAILURE);
-                        }
-                        gen.m_vars.push_back({.name = param.value.value(), .stack_loc = param_offset});
-                        //gen.m_vars.push_back({.name = param.value.value(), .stack_loc = func_decl->params.size() - offset - 1});
-                        param_offset += 8;
+                    // Function prologue...
+                    gen.m_output << "  push rbp" << "\n";
+                    gen.m_output << "  mov rbp, rsp" << "\n";
+                    gen.m_output << "  sub rsp, " << func_decl->params.size() * 8 << " ; make space for parameters\n";
+                    gen.m_output << "  mov rdi, 5" << "\n";
+
+                    for (size_t i = 0; i < func_decl->params.size(); ++i) {
+                        gen.m_output << "  mov [rbp - " << (i + 1) * 8 << "], " << "rdi\n";  // Assuming parameters are passed in rdi, rsi, etc.
                     }
 
                     gen.generate_scope(func_decl->body);
-                        
-                    // Cleanup and return
+
+                    // Function epilogue...
+                    gen.m_output << gen.m_currentFunctionEpilogueLabel << ":\n";
+                    gen.m_output << "  add rsp, " << func_decl->params.size() * 8 << "\n";  // Clean up the parameters
                     gen.m_output << "  mov rsp, rbp\n";
                     gen.m_output << "  pop rbp\n";
                     gen.m_output << "  ret\n";
-
-                    // Clear function parameters from the variables list after function is generated.
-                    gen.m_vars.clear();
-
+                    gen.m_output << ";; /Function: " << funcName << "\n";
                 }
             }
 
             void operator()(const NodeStatementExit* stmt_exit) const
             {
                 if(!functionPass){
+                gen.m_output << ";;Exit\n";
                 gen.generate_expression(stmt_exit->expr);
                 gen.m_output << "  mov rax, 60\n";
                 gen.pop("rdi");
                 gen.m_output << "  syscall\n";
+                gen.m_output << ";;/Exit\n";
                 }
             }
             void operator()(const NodeStatementInt* stmt_int) const
@@ -311,6 +343,7 @@ class Generator{
             }
             void operator()(const NodeStatementIf* statement_if) const {
                 if(!functionPass){
+                gen.m_output << ";;If\n";
                 gen.generate_expression(statement_if->expr); 
                 gen.pop("rax");  
                 gen.m_output << "  test rax, rax\n";
@@ -327,8 +360,9 @@ class Generator{
                 } else {
                     gen.m_output << label << ":\n";
                 }
-                gen.m_output << "  ;; /if\n";
+                
                 }
+                gen.m_output << ";;/If\n";
             }
             void operator()(const NodeScope* scope) const
             {
@@ -344,10 +378,11 @@ class Generator{
                 });
                 
                 if(it == gen.m_vars.end()){
-                    std::cerr << "Undeclared identifier: " << stmt_assign->ident.value.value() << std::endl;
+                    std::cerr << "Undeclared identifier 2: " << stmt_assign->ident.value.value() << std::endl;
                 }
                 gen.generate_expression(stmt_assign->expr);
                 gen.pop("rax");
+                
                 gen.m_output << "  mov [rsp + " << (gen.m_stack_size - (*it).stack_loc - 1) * 8 << "], rax\n";
                 }
             }
@@ -391,25 +426,36 @@ class Generator{
     std::cout << "generating program" << std::endl;
     std::stringstream full_output;
 
+    
 
+    m_output << "section .data\n";
+    m_output << m_data.str();
+    m_output << "section .text\n";
+    m_output << "global test\n";
+    m_output << "global _start\n";
+    m_output << "_start:\n";
+
+    
+
+    for(const NodeStatement* statement : m_program.statements) {
+        generate_statement(statement, false);
+    }
+
+
+    m_output << "  call test\n";
+    m_output << "  mov rdi, 21\n";
+    m_output << "  mov rax, 60\n";
+    m_output << "  syscall\n";
+    
+    m_output << ";;functions\n";
 
     for(const NodeStatement* statement : m_program.statements) {
         generate_statement(statement, true);
     }
 
-    m_output << "section .data\n";
-    m_output << m_data.str();
-    m_output << "section .text\nglobal _start\n";
-    m_output << "_start:\n";
-
-    // Generate the main program code
-    for(const NodeStatement* statement : m_program.statements) {
-        generate_statement(statement, false);
-    }
-
-    m_output << "  mov rax, 60\n";
-    m_output << "  mov rdi, 0\n";
-    m_output << "  syscall\n";
+    //m_output << "  mov rax, 60\n";
+    //m_output << "  mov rdi, 12\n";
+    //m_output << "  syscall\n";
 
     // Append function definitions at the end
     //full_output << m_function_defs.str();
@@ -417,7 +463,11 @@ class Generator{
     return m_output.str();
     }
 
-    private:
+    std::string currentFunctionEpilogueLabel() const {
+        return m_currentFunctionEpilogueLabel;
+    }
+
+    private:    
 
         void push(const std::string& reg) {
             m_output << "  push " << reg << "\n";
@@ -430,6 +480,7 @@ class Generator{
         }
 
         void begin_scope(){
+            m_output << ";;begin_scope" << "\n";
             m_scopes.push_back(m_vars.size());
         }
 
@@ -458,6 +509,7 @@ class Generator{
             size_t stack_loc;
         };
 
+        std::string m_currentFunctionEpilogueLabel;
         std::stringstream m_function_defs;
         std::stringstream m_data; // For storing data section
         std::map<std::string, std::string> m_string_literals; // Map from string literal to its label

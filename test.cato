@@ -1,17 +1,7 @@
-int x = 5;
-exit(x);
+int a = 7;
+function test(a){
+    return a;
+}
 
-//function test(a){
-    
-//}
-/*
-int x = 1;
-int y = 2;
-int z = 3;
-x = 4;
-y = 5;
-z = 6;
-*/
-
-//int r = test(10);
-//exit(x);
+int r = test(2);
+exit(r);

@@ -42,6 +42,7 @@
     struct NodeStatement;
     struct NodeIfPred;
     struct NodeFunctionDecl;
+    struct NodeStatementReturn;
 
 
     struct NodeScope{
@@ -80,7 +81,7 @@
     };
 
     struct NodeStatement{
-        std::variant<NodeStatementExit*, NodeStatementInt*, NodeScope*, NodeStatementIf*, NodeStatementAssign*, NodeStatementFor*, NodeFunctionDecl*> var;
+        std::variant<NodeStatementExit*, NodeStatementInt*, NodeScope*, NodeStatementIf*, NodeStatementAssign*, NodeStatementFor*, NodeFunctionDecl*, NodeStatementReturn*> var;
     };
 
 
@@ -140,6 +141,10 @@
     struct NodeFunctionCall {
         Token ident;
         std::vector<NodeExpr*> args;
+    };
+
+    struct NodeStatementReturn {
+        NodeExpr* expr;
     };
 
     struct NodeTerm {
@@ -529,6 +534,28 @@ class Parser {
                         exit(EXIT_FAILURE);
                     }
                         
+                }
+                else if (auto return_ = try_consume(TokenType::return_)) {
+                    auto stmt_return = m_allocator.alloc<NodeStatementReturn>();
+
+                    if (!try_consume(TokenType::semi)) {
+                        if (auto expr = parse_expr()) {
+                            stmt_return->expr = expr.value();
+                        } else {
+                            std::cerr << "Expected expression after return" << std::endl;
+                            exit(EXIT_FAILURE);
+                        }
+                    } else {
+                        stmt_return->expr = nullptr; 
+                    }
+
+                    if (expect_semicolon) {
+                        try_consume(TokenType::semi, "Expected `;` after return statement");
+                    }
+
+                    auto stmt = m_allocator.alloc<NodeStatement>();
+                    stmt->var = stmt_return;
+                    return stmt;
                 }
                 else if(auto if_ = try_consume(TokenType::if_)){
                     try_consume(TokenType::open_paren, "Expected `(`");
