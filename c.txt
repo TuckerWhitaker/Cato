@@ -1,4 +1,4 @@
 nasm -felf64 test.asm && ld test.o -o test && ./test
 
-cmake --build build/
+cmake --build build/ && ./build/cato
 ./build/cato

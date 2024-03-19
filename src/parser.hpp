@@ -187,10 +187,10 @@ class Parser {
                 return term;
             }
             else if (auto ident = try_consume(TokenType::ident)) {
-                if (try_consume(TokenType::open_paren)) { // Function call
+                if (try_consume(TokenType::open_paren)) {
                     auto func_call = m_allocator.alloc<NodeFunctionCall>();
                     func_call->ident = ident.value();
-                    // Parse arguments
+
                     while (!try_consume(TokenType::close_paren)) {
                         if (auto arg = parse_expr()) {
                             func_call->args.push_back(arg.value());
@@ -604,6 +604,7 @@ class Parser {
             while (!try_consume(TokenType::close_paren)) {
                 func_decl->params.push_back(try_consume(TokenType::ident, "Expected parameter name"));
                 try_consume(TokenType::comma);
+                
             }
             if (auto scope = parse_scope()) {
             func_decl->body = scope.value();

@@ -25,25 +25,29 @@ class Generator{
                     gen.m_output << ";;/NodeTermIntLit" << "\n";
                 }
                 void operator()(const NodeTermIdent* term_ident) const {
-
                     std::cout << "m_vars: " << gen.m_vars.size() << std::endl;
-                    
+
                     auto it = std::find_if(gen.m_vars.cbegin(), gen.m_vars.cend(), [&](const Var& var) {
                         return var.name == term_ident->ident.value.value();
                     });
 
-                    if(it == gen.m_vars.cend()){
+                    if (it == gen.m_vars.cend()) {
                         std::cerr << "Undeclared identifier 1: " << term_ident->ident.value.value() << std::endl;
                         exit(EXIT_FAILURE);
                     }
-                    
-                    std::stringstream offset;
-                    std::cout << "stack size:" << gen.m_stack_size << std::endl;
-                    std::cout << "stack loc:" <<(*it).stack_loc << std::endl;
-                    std::cout << "QWORD [rsp + : " << (gen.m_stack_size - (*it).stack_loc) * 8 << std::endl;
-                    offset << "QWORD [rsp + " << (gen.m_stack_size - (*it).stack_loc) * 8 << "]";
-                    
-                    gen.push(offset.str());
+
+                    gen.m_output << "  ;; Using variable: " << term_ident->ident.value.value() << "\n";
+                    std::vector<std::string> param_registers = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+
+                    if (it->stack_loc < param_registers.size()) {
+                        gen.m_output << "  mov rax, " << param_registers[it->stack_loc] << "\n";
+                    } else {
+                        std::stringstream offset;
+                        offset << "QWORD [rbp - " << (it->stack_loc - param_registers.size() + 1) * 8 << "]"; 
+                        gen.m_output << "  mov rax, " << offset.str() << "\n";
+                    }
+
+                    gen.push("rax");
                 }
                 void operator()(const NodeTermParen* term_paren) const
                 {
@@ -52,19 +56,35 @@ class Generator{
                 void operator()(const NodeTermStringLit* term_string_lit) const {
                     auto it = gen.m_string_literals.find(term_string_lit->value);
                     if (it == gen.m_string_literals.end()) {
-                        // Generate a new label for the string
                         std::string label = gen.create_label();
                         gen.m_string_literals[term_string_lit->value] = label;
-                        // Store the string in the data section
                         gen.m_data << label << ": db '" << term_string_lit->value << "', 0\n"; 
                     }
 
-                    // Load the address of the string into rax
                     gen.m_output << "  lea rax, [" << gen.m_string_literals[term_string_lit->value] << "]\n";
                     gen.push("rax");
                 }
                 void operator()(const NodeFunctionCall* func_call) const {
                     gen.m_output << ";;NodeFunctionCall" << "\n";
+
+                    const std::vector<std::string> argument_registers = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+                    size_t arg_count = func_call->args.size();
+
+                    for (size_t i = 0; i < arg_count; ++i) {
+                        gen.generate_expression(func_call->args[i]);
+
+                        if (i < argument_registers.size()) {
+                            gen.m_output << "  pop " << argument_registers[i] << "\n";
+                        } else {
+                            gen.m_output << "  pop rax\n";
+                            gen.m_output << "  push rax\n";
+                        }
+                    }
+
+                    gen.m_output << "  call " << func_call->ident.value.value() << "\n";
+                    gen.push("rax");
+
+                    gen.m_output << ";;/NodeFunctionCall" << "\n";
                 }
 
             };
@@ -262,31 +282,23 @@ class Generator{
                 if (!functionPass) {
                     gen.m_output << ";;Return\n";
 
-                    // If the return statement has an expression, evaluate it
                     if (statement_return->expr) {
                         gen.generate_expression(statement_return->expr);
-                        // Assume the result is in rax after expression evaluation
                         gen.pop("rax");
                     }
-
-                    // Jump to the function's epilogue
-                    // This assumes you have a label at the end of the function for the epilogue
-                    // The label should be unique per function; you can generate it when you start processing the function
                     gen.m_output << "  jmp " << gen.currentFunctionEpilogueLabel() << "\n";
                     gen.m_output << ";;/Return\n";
                 }
             }
 
             
-            void operator()(const NodeFunctionDecl* func_decl) const 
-            {
-                if (functionPass) {
+            void operator()(const NodeFunctionDecl* func_decl) const {
+                    if (functionPass) {
                     if (!func_decl->ident.value.has_value()) {
                         std::cerr << "Function identifier is missing." << std::endl;
                         exit(EXIT_FAILURE);
                     }
 
-                    // Generate and store the unique epilogue label for the current function
                     gen.m_currentFunctionEpilogueLabel = gen.create_label() + "_epilogue";
 
                     std::string funcName = func_decl->ident.value.value();
@@ -294,18 +306,30 @@ class Generator{
                     gen.m_output << "global " << funcName << "\n";
                     gen.m_output << funcName << ":\n";
 
-                    // Function prologue...
                     gen.m_output << "  push rbp" << "\n";
                     gen.m_output << "  mov rbp, rsp" << "\n";
 
+                    std::vector<std::string> param_registers = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+
+                    size_t index = 0;
+                    for (const auto& param : func_decl->params) {
+                        if (index < param_registers.size()) {
+                            gen.m_vars.push_back({param.value.value(), index});
+                        } else {
+                            gen.m_output << "  mov rax, [rbp + " << 16 + (index - param_registers.size()) * 8 << "]\n";
+                            gen.m_output << "  push rax\n";
+                            gen.m_vars.push_back({param.value.value(), gen.m_stack_size++});
+                        }
+                        ++index;
+                    }
+
                     gen.generate_scope(func_decl->body);
-                    // Function epilogue...
+
+                    // Function epilogue
                     gen.m_output << "  mov rsp, rbp" << "\n";
                     gen.m_output << "  pop rbp" << "\n";
                     gen.m_output << "  ret" << "\n";
 
-
-                    // Mark the epilogue label position
                     gen.m_output << gen.m_currentFunctionEpilogueLabel << ":\n";
                     gen.m_output << "  mov rsp, rbp\n";
                     gen.m_output << "  pop rbp\n";
@@ -328,7 +352,7 @@ class Generator{
             void operator()(const NodeStatementInt* stmt_int) const {
                 if (!functionPass) {
                     auto it = std::find_if(gen.m_vars.cbegin(), gen.m_vars.cend(), [&](const Var& var) {
-                        return var.name == stmt_int->ident.value.value();
+                    return var.name == stmt_int->ident.value.value();
                     });
 
                     if (it != gen.m_vars.cend()) {
@@ -336,10 +360,10 @@ class Generator{
                         exit(EXIT_FAILURE);
                     }
 
-                    // Add the variable to the stack and increment the stack size.
                     gen.generate_expression(stmt_int->expr);
                     gen.m_vars.push_back({.name = stmt_int->ident.value.value(), .stack_loc = gen.m_stack_size });
-                    //gen.m_stack_size++;
+
+                    gen.m_output << "  ;; Declaring int variable: " << stmt_int->ident.value.value() << "\n";
                 }
             }
             void operator()(const NodeStatementIf* statement_if) const {
@@ -388,6 +412,7 @@ class Generator{
                 std::cout << "stack size:" << gen.m_stack_size << std::endl;
                 std::cout << "stack loc:" <<(*it).stack_loc << std::endl;
                 std::cout << "QWORD [rsp + : " << (gen.m_stack_size - (*it).stack_loc) * 8 << std::endl;
+                gen.m_output << "  ;; Assigning to variable: " << stmt_assign->ident.value.value() << "\n";
                 gen.m_output << "  mov [rsp + " << (gen.m_stack_size - (*it).stack_loc) * 8 << "], rax\n";
                 }
             }
@@ -445,7 +470,6 @@ class Generator{
         generate_statement(statement, false);
     }
 
-
     m_output << "  mov rdi, rax\n";
     m_output << "  mov rax, 60\n";
     m_output << "  syscall\n";
@@ -455,13 +479,6 @@ class Generator{
     for(const NodeStatement* statement : m_program.statements) {
         generate_statement(statement, true);
     }
-
-    //m_output << "  mov rax, 60\n";
-    //m_output << "  mov rdi, 12\n";
-    //m_output << "  syscall\n";
-
-    // Append function definitions at the end
-    //full_output << m_function_defs.str();
 
     return m_output.str();
     }

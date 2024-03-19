@@ -1,5 +1,5 @@
-int a = 9;
-int b = 5;
-int c = 10;
+function test(d, e){
+    return(d + e + e + d);
+}
 
-exit((a + c) + (b * 2));
+int c = test(6, 3);
