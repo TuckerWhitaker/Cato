@@ -476,8 +476,10 @@ class Generator{
     
     m_output << ";;functions\n";
 
-    for(const NodeStatement* statement : m_program.statements) {
-        generate_statement(statement, true);
+    for(const NodeFunctionDecl* func : m_program.functions) {
+        NodeStatement stmt{};
+        stmt.var = const_cast<NodeFunctionDecl*>(func);
+        generate_statement(&stmt, true);
     }
 
     return m_output.str();
