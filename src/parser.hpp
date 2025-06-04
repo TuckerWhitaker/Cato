@@ -205,20 +205,12 @@ class Parser {
                     term->var = func_call;
                     return term;
                 } else {
-                    // Handle identifier (variable)
                     auto expr_ident = m_allocator.alloc<NodeTermIdent>();
                     expr_ident->ident = ident.value();
                     auto term = m_allocator.alloc<NodeTerm>();
                     term->var = expr_ident;
                     return term;
                 }
-            }
-            else if (auto ident = try_consume(TokenType::ident)) {
-                auto expr_ident = m_allocator.alloc<NodeTermIdent>();
-                expr_ident->ident = ident.value();
-                auto term = m_allocator.alloc<NodeTerm>();
-                term->var = expr_ident;
-                return term;
             }
             else if (auto open_paren = try_consume(TokenType::open_paren)) {
                 auto expr = parse_expr();
@@ -619,10 +611,16 @@ class Parser {
             NodeProg prog;
 
             while(peek().has_value()){
-                if(auto statment = parse_statement()){
-                    prog.statements.push_back(statment.value());
-                }
-                else {
+                if(peek()->type == TokenType::function){
+                    if(auto func = parse_function_decl()){
+                        prog.functions.push_back(func.value());
+                    } else {
+                        std::cerr << "Invalid function declaration" << std::endl;
+                        exit(EXIT_FAILURE);
+                    }
+                } else if(auto statement = parse_statement()){
+                    prog.statements.push_back(statement.value());
+                } else {
                     std::cerr << "Invalid Expression 2 " << std::endl;
                     exit(EXIT_FAILURE);
                 }
